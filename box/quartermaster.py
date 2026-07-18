@@ -26,12 +26,30 @@ _TXN = re.compile(
     rf"(?P<unit>{_UNITS})?\s*(?:of\s+)?"
     rf"(?P<item>[a-z][a-z\s]{{2,40}}?)\s*[.!?]?$", re.I)
 
-# "how much water do we have left" — left/have/remaining is what keeps
-# "how much water do 85 people NEED" flowing to the RAG instead
-_QUERY = re.compile(
-    r"\bhow (?:much|many)\s+(?P<item>[a-z][a-z\s]{1,30}?)\s+"
-    r"(?:do we have|is left|are left|left|remaining|in stock|on hand)",
-    re.I)
+# Stock queries in natural phrasings: "how much water do we have left",
+# "how much gallons of water we have in our storage" (verbatim venue
+# miss). A have/left/storage keyword is required and 'need' vetoes —
+# "how much water do 85 people NEED" must flow to the RAG.
+_QUERY_LEAD = re.compile(r"\bhow (?:much|many)\s+(.*)$", re.I)
+_QUERY_KEY = re.compile(r"\b(?:have|left|remaining|stock|storage|"
+                        r"on hand|got)\b", re.I)
+_QUERY_STOP = {"do", "we", "did", "is", "are", "have", "left",
+               "remaining", "in", "on", "got"}
+
+
+def _parse_query_item(text: str) -> str | None:
+    if re.search(r"\bneed", text, re.I):
+        return None
+    m = _QUERY_LEAD.search(text)
+    if not m or not _QUERY_KEY.search(m[1]):
+        return None
+    item_words = []
+    for w in m[1].split():
+        wl = w.lower().strip(",.?!")
+        if wl in _QUERY_STOP:
+            break
+        item_words.append(wl)
+    return " ".join(item_words) or None
 
 # whisper usually writes digits, but insure the common spoken numbers
 _WORDNUM = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
@@ -94,52 +112,67 @@ COMMON = {"water", "blankets", "blanket", "meals", "food", "masks",
           "sanitizer", "soap", "gloves", "wipes", "socks", "toothbrushes"}
 
 
-def maybe_answer(text: str, sconn=None) -> str | None:
-    """Handle a supply transaction or stock query; None if neither."""
-    sconn = sconn or scribe.connect()
+def apply_txn(sconn, direction: str, qty: float, unit: str,
+              raw_item: str, gated: bool = False) -> str | None:
+    """Deterministic ledger write + spoken confirmation. `gated` applies
+    the COMMON-item sanity gate (regex path); router-sourced calls skip
+    it (the model already judged intent)."""
     stock = scribe.stock(sconn)
+    unit = (unit or "").lower()
+    item = _canonical_item(raw_item, stock)
+    if gated and not (item in stock or unit or set(item.split()) & COMMON):
+        return None
+    spoken = f"{_fmt_qty(qty)} {unit}".strip() if unit else _fmt_qty(qty)
+    converted = ""
+    if item == "water" and unit.startswith("gallon"):
+        qty = round(qty * 3.785, 1)
+        converted = f" — {_fmt_qty(qty)} liters"
+        unit = "L"
+    if item == "water" and unit in ("liter", "liters", "litre",
+                                    "litres", ""):
+        unit = "L"
+        spoken = f"{_fmt_qty(qty)} liters"
+    delta = qty if direction == "in" else -qty
+    scribe.supply(sconn, item, delta, unit)
+    remaining = scribe.stock(sconn).get(item, 0.0)
+    verb = "Received" if direction == "in" else "Distributed"
+    reply = (f"Logged. {verb} {spoken} of {item}{converted}. "
+             f"{_fmt_qty(remaining)} {unit} remaining".strip() + ".")
+    if item == "water":
+        days = scribe.water_days_remaining(sconn)
+        reply += (f" That is {days:.1f} days at Sphere rates for "
+                  f"everyone registered.")
+    return reply
 
+
+def stock_reply(sconn, raw_item: str, want_gallons: bool = False) -> str:
+    """Deterministic stock report for an item named any which way."""
+    stock = scribe.stock(sconn)
+    item = _canonical_item(raw_item, stock)
+    if item not in stock:
+        return f"I have no {item} on the ledger."
+    if item == "water":
+        days = scribe.water_days_remaining(sconn)
+        liters = stock[item]
+        gal = (f" — about {liters / 3.785:.0f} gallons"
+               if want_gallons else "")
+        return (f"You have {_fmt_qty(liters)} liters of water{gal} — "
+                f"{days:.1f} days at Sphere rates for everyone "
+                "registered.")
+    return f"You have {_fmt_qty(stock[item])} {item} on hand."
+
+
+def maybe_answer(text: str, sconn=None) -> str | None:
+    """Regex fast-path: supply transaction or stock query; None if
+    neither pattern hits (the LLM router is the safety net behind us)."""
+    sconn = sconn or scribe.connect()
     parsed = parse(text)
     if parsed:
         direction, qty, unit, raw_item = parsed
-        item = _canonical_item(raw_item, stock)
-        if not (item in stock or unit
-                or set(item.split()) & COMMON):
-            return None
-        # echo the SPOKEN unit back, then ledger water in liters
-        spoken = f"{_fmt_qty(qty)} {unit}".strip() if unit \
-            else _fmt_qty(qty)
-        converted = ""
-        if item == "water" and unit.startswith("gallon"):
-            qty = round(qty * 3.785, 1)
-            converted = f" — {_fmt_qty(qty)} liters"
-            unit = "L"
-        if item == "water" and unit in ("liter", "liters", "litre",
-                                        "litres", ""):
-            unit = "L"
-            spoken = f"{_fmt_qty(qty)} liters"
-        delta = qty if direction == "in" else -qty
-        scribe.supply(sconn, item, delta, unit)
-        remaining = scribe.stock(sconn).get(item, 0.0)
-        verb = "Received" if direction == "in" else "Distributed"
-        reply = (f"Logged. {verb} {spoken} of {item}{converted}. "
-                 f"{_fmt_qty(remaining)} {unit} remaining".strip() + ".")
-        if item == "water":
-            days = scribe.water_days_remaining(sconn)
-            reply += (f" That is {days:.1f} days at Sphere rates for "
-                      f"everyone registered.")
-        return reply
-
-    q = _QUERY.search(_words_to_digits(text))
-    if q:
-        item = _canonical_item(q["item"], stock)
-        if item in stock:
-            reply = f"You have {_fmt_qty(stock[item])} {item} on hand."
-            if item == "water":
-                days = scribe.water_days_remaining(sconn)
-                reply = (f"You have {_fmt_qty(stock[item])} liters of "
-                         f"water — {days:.1f} days at Sphere rates for "
-                         f"everyone registered.")
-            return reply
-        return f"I have no {item} on the ledger."
+        return apply_txn(sconn, direction, qty, unit, raw_item,
+                         gated=True)
+    raw_q = _parse_query_item(text)
+    if raw_q:
+        return stock_reply(sconn, raw_q,
+                           want_gallons="gallon" in text.lower())
     return None

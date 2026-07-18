@@ -164,6 +164,69 @@ class Brain:
         self.last_mode = "reading"
         return text
 
+    def _route_with_llm(self, question: str) -> str | None:
+        """Gemma classifies the intent; deterministic code executes it.
+        Returns None for 'question' (or any failure) -> RAG proceeds."""
+        try:
+            from . import router
+            r = router.classify(question)
+        except Exception:
+            return None
+        if not r:
+            return None
+        kind = r.get("kind")
+        emit("routed", kind=kind)
+        try:
+            if kind == "stock" and r.get("item"):
+                from . import quartermaster, scribe
+                reply = quartermaster.stock_reply(
+                    scribe.connect(), str(r["item"]),
+                    want_gallons="gallon" in question.lower())
+                return self._say(question, reply, "supplies")
+            if kind == "supply" and r.get("item") and r.get("qty"):
+                from . import quartermaster, scribe
+                direction = "in" if r.get("direction") == "in" else "out"
+                reply = quartermaster.apply_txn(
+                    scribe.connect(), direction, float(r["qty"]),
+                    str(r.get("unit", "")), str(r["item"]))
+                if reply:
+                    return self._say(question, reply, "supplies")
+            if kind == "places" and r.get("place"):
+                from . import nav
+                reply = nav.answer_for(str(r["place"]))
+                if reply:
+                    return self._say(question, reply, "places")
+            if kind == "recognize":
+                return self._say(question, self._recognize(), "recognize")
+            if kind == "read" and r.get("book"):
+                from . import stories
+                book = stories.match_title(str(r["book"]))
+                if book:
+                    title, filename = book
+                    self.reading = (title, filename, 0)
+                    if not config.MUTE:
+                        tts.speak(f"{title}. Here we go.")
+                    reply = self._read_next()
+                    self.history.append((question, f"[opened {title}]"))
+                    return reply
+            if kind == "story":
+                emit("retrieved", citations=[], mode="story")
+                stream = llm.generate_stream(
+                    f"REQUEST: {question}\nTell the story now.",
+                    persona.STORY, num_predict=300)
+                if config.MUTE:
+                    reply = "".join(stream).strip()
+                else:
+                    reply = tts.speak_stream(stream,
+                                             preroll=tts.next_ack())
+                emit("spoke", text=reply, mode="story")
+                self.history.append((question, reply))
+                self.last_mode = "story"
+                return reply
+        except Exception as e:
+            emit("error", stage="router-dispatch", detail=str(e))
+        return None                       # "question" or anything odd -> RAG
+
     def _say(self, question: str, reply: str, mode: str) -> str:
         emit("spoke", text=reply, mode=mode)
         if not config.MUTE:
@@ -258,6 +321,13 @@ class Brain:
             n = None
         if n:
             return self._say(question, n, "places")
+        # SMART ROUTER: every fast-path regex missed. Before dumping this
+        # on the RAG blind, ask Gemma what the user MEANT (~2 s, temp 0)
+        # and dispatch to the same deterministic executors. Field lesson:
+        # phrasings are infinite; patterns aren't.
+        routed = self._route_with_llm(question)
+        if routed is not None:
+            return routed
         cont = question.lower().strip(" .!?") in _CONTINUATIONS
         # sticky interview: stay in the intake flow until it resolves.
         mode = "answer"

@@ -30,16 +30,22 @@ _END = re.compile(r"\*\*\*\s*END OF (?:THE|THIS) PROJECT GUTENBERG", re.I)
 _cache: dict[str, list[str]] = {}
 
 
-def match(text: str):
-    """(title, filename) when the utterance names a book on the shelf."""
-    tl = text.lower()
-    if "read" not in tl and "book" not in tl:
-        return None
+def match_title(name: str):
+    """(title, filename) for a book named any which way, or None."""
+    tl = name.lower()
     for keys, entry in BOOKS.items():
         if any(k in tl for k in keys):
             if (SHELF / entry[1]).exists():
                 return entry
     return None
+
+
+def match(text: str):
+    """(title, filename) when the utterance names a book on the shelf."""
+    tl = text.lower()
+    if "read" not in tl and "book" not in tl:
+        return None
+    return match_title(tl)
 
 
 def titles_on_shelf() -> list[str]:

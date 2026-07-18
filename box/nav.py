@@ -108,6 +108,25 @@ def parse_kind(question: str) -> str | None:
     return None
 
 
+def resolve_kind(place_text: str) -> str | None:
+    """Snap free text ('the ER', 'a grocery') onto a known POI kind."""
+    tl = place_text.lower()
+    for alias in sorted(ALIASES, key=len, reverse=True):
+        if re.search(rf"\b{alias}\b", tl):
+            return ALIASES[alias]
+    return None
+
+
+def answer_for(place_text: str,
+               lat: float = None, lon: float = None) -> str | None:
+    """Deterministic nearest-X for a place named any which way
+    (router-sourced) — same engine as the regex path."""
+    kind = resolve_kind(place_text)
+    if kind is None or not config.POI_DB.exists():
+        return None
+    return _answer_kind(kind, lat, lon)
+
+
 def maybe_answer(question: str,
                  lat: float = None, lon: float = None) -> str | None:
     """Deterministic nearest-X answer, or None if not a places question
@@ -117,6 +136,10 @@ def maybe_answer(question: str,
         return None
     if not config.POI_DB.exists():
         return None
+    return _answer_kind(kind, lat, lon)
+
+
+def _answer_kind(kind: str, lat: float = None, lon: float = None) -> str:
     lat = lat if lat is not None else config.BOX_LAT
     lon = lon if lon is not None else config.BOX_LON
     hits = nearest(connect(), kind, lat, lon)
