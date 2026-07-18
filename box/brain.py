@@ -11,6 +11,9 @@ from pathlib import Path
 from . import config, llm, persona, retrieval, stt, tts
 
 EVENTS = Path("/tmp/box-events.jsonl")
+ANNOUNCE = Path("/tmp/box-announce.jsonl")   # proactive speech queue —
+#   the dashboard (a separate process) drops lines here; the brain
+#   notices within ~1 s and speaks them unprompted
 
 
 def emit(kind: str, **data) -> None:
@@ -302,6 +305,22 @@ class Brain:
             emit("error", stage="tool-dispatch", detail=str(e)[:200])
         return None                     # unknown tool / failed -> RAG
 
+    def _drain_announcements(self) -> None:
+        try:
+            lines = ANNOUNCE.read_text().splitlines()
+            ANNOUNCE.unlink()
+        except OSError:
+            return
+        for ln in lines:
+            try:
+                say = json.loads(ln).get("say")
+            except ValueError:
+                continue
+            if say:
+                emit("announced", text=say)
+                if not config.MUTE:
+                    tts.speak(say)
+
     def _say(self, question: str, reply: str, mode: str) -> str:
         emit("spoke", text=reply, mode=mode)
         if not config.MUTE:
@@ -483,7 +502,11 @@ class Brain:
         tts.speak("This is Ember. Say, hey Ember, when you need me.")
         awake_until = 0.0
         while True:
-            wav = audio.listen_for_utterance()
+            wav = audio.listen_for_utterance(
+                stop_check=ANNOUNCE.exists)
+            if wav == "":
+                self._drain_announcements()
+                continue
             if wav is None:
                 emit("status", state="mic lost; retrying")
                 time.sleep(2)

@@ -29,21 +29,28 @@ def _arecord():
         stdout=subprocess.PIPE)
 
 
-def listen_for_utterance(aggressiveness: int = 2) -> str | None:
+def listen_for_utterance(aggressiveness: int = 2,
+                         stop_check=None) -> str | None:
     """Block until one spoken utterance is captured; return wav path.
-    Returns None if the capture process dies."""
+    Returns None if the capture process dies, or "" when stop_check
+    fires (the brain has something PROACTIVE to say)."""
     vad = webrtcvad.Vad(aggressiveness)
     proc = _arecord()
     preroll = collections.deque(maxlen=PREROLL_FRAMES)
     voiced: list[bytes] = []
     silence_frames = 0
     in_speech = False
+    frame_count = 0
     max_frames = int(MAX_UTTERANCE_S * 1000 / FRAME_MS)
     try:
         while True:
             frame = proc.stdout.read(FRAME_BYTES)
             if len(frame) < FRAME_BYTES:
                 return None
+            frame_count += 1
+            if (stop_check is not None and not in_speech
+                    and frame_count % 33 == 0 and stop_check()):
+                return ""
             is_speech = vad.is_speech(frame, config.SAMPLE_RATE)
             if not in_speech:
                 preroll.append(frame)

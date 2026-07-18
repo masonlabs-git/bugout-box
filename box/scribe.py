@@ -66,6 +66,24 @@ def register(conn, names: str, medical: str = "", missing: str = "",
     return cur.lastrowid
 
 
+def missing_matches(conn, new_names: str, exclude_id: int = None) -> list[dict]:
+    """Households whose 'missing' field names someone who just checked
+    in — the trigger for a PROACTIVE reunification announcement."""
+    tokens = {t.strip(".,()").lower() for t in new_names.split()
+              if len(t.strip(".,()")) > 2}
+    out = []
+    for h in households(conn):
+        if not h["missing"] or h["id"] == exclude_id:
+            continue
+        mtoks = {t.strip(".,()").lower() for t in h["missing"].split()
+                 if len(t.strip(".,()")) > 2}
+        overlap = tokens & mtoks
+        if len(overlap) >= 2 or (len(overlap) == 1
+                                 and max(map(len, overlap)) > 4):
+            out.append(h)
+    return out
+
+
 def find_person(conn, name: str) -> list[dict]:
     rows = conn.execute(
         "SELECT id, ts, names, medical, missing, phone, photo, location "

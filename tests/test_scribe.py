@@ -65,3 +65,21 @@ class RemoveTest(unittest.TestCase):
         from box import scribe
         conn = scribe.connect(":memory:")
         self.assertFalse(scribe.remove(conn, 999))
+
+
+class ProactiveReunificationTest(unittest.TestCase):
+    def test_arrival_matching_a_missing_report_is_flagged(self):
+        conn = scribe.connect(":memory:")
+        scribe.register(conn, "Maria Lopez, Diego Lopez",
+                        missing="Ana Lopez (daughter, 17)")
+        rid = scribe.register(conn, "Ana Lopez", location="intake desk")
+        hits = scribe.missing_matches(conn, "Ana Lopez", exclude_id=rid)
+        self.assertEqual(len(hits), 1)
+        self.assertIn("Maria", hits[0]["names"])
+
+    def test_unrelated_arrival_does_not_trigger(self):
+        conn = scribe.connect(":memory:")
+        scribe.register(conn, "Maria Lopez", missing="Ana Lopez")
+        rid = scribe.register(conn, "Bob Smith")
+        self.assertEqual(
+            scribe.missing_matches(conn, "Bob Smith", exclude_id=rid), [])

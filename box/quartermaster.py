@@ -147,6 +147,9 @@ def apply_txn(sconn, direction: str, qty: float, unit: str,
         days = scribe.water_days_remaining(sconn)
         reply += (f" That is {days:.1f} days at Sphere rates for "
                   f"everyone registered.")
+        if days < 5 and direction == "out":
+            reply += (" Heads up — that is under five days. Consider "
+                      "requesting a water delivery now.")
     return reply
 
 

@@ -309,6 +309,18 @@ def intake_submit():
                           request.form.get("phone", ""), photo=photo,
                           location=request.form.get("location", ""))
     emit("registered", id=rid, names=names, photo=bool(photo))
+    # PROACTIVE reunification: does this arrival match anyone another
+    # household reported missing? The brain speaks it unprompted.
+    for h in scribe.missing_matches(s, names, exclude_id=rid):
+        line = (f"Reunification alert. {names} just checked in — the "
+                f"{h['names'].split(',')[0].strip()} household listed "
+                f"{h['missing']} as missing."
+                + (f" They are at {h['location']}." if h.get("location")
+                   else ""))
+        emit("reunification", text=line)
+        with open("/tmp/box-announce.jsonl", "a") as f:
+            import json as _json
+            f.write(_json.dumps({"say": line}) + "\n")
     return redirect("/board")
 
 
