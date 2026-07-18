@@ -12,7 +12,8 @@ from . import config
 
 def generate_stream(prompt: str, system: str,
                     num_predict: int = None,
-                    stats: dict = None) -> Iterator[str]:
+                    stats: dict = None,
+                    temperature: float = None) -> Iterator[str]:
     """Yield response text fragments as they generate.
 
     Pass a dict as `stats` to receive ollama's timing numbers from the
@@ -30,7 +31,7 @@ def generate_stream(prompt: str, system: str,
             "num_predict": num_predict or config.NUM_PREDICT,
             # model-card default is 1.0; an emergency assistant wants
             # consistent, instruction-tight answers, not creative ones
-            "temperature": 0.7,
+            "temperature": 0.7 if temperature is None else temperature,
         },
         "keep_alive": -1,
     }

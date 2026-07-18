@@ -100,6 +100,18 @@ def is_story(text: str) -> bool:
     return bool(_STORY.search(text))
 
 
+_ES_WORDS = re.compile(r"\b(el|la|los|las|es|agua|para|de|una|con|"
+                       r"hierve|filtre|cocine|purifica\w*)\b", re.I)
+_EN_WORDS = re.compile(r"\b(the|and|water|boil|if|you|from|it)\b")
+
+
+def _clean_spanish(text: str) -> bool:
+    """Spanish-dominant with no meaningful English — code-switched
+    replies ('Use bottled water. Cocine el agua...') must fail this."""
+    return (len(_ES_WORDS.findall(text)) >= 2
+            and len(_EN_WORDS.findall(text)) < 2)
+
+
 class Brain:
     def __init__(self):
         self.conn = retrieval.connect()
@@ -259,12 +271,29 @@ class Brain:
         else:
             ask = question
         # explicit language requests must not depend on sampling luck —
-        # measured: a trailing note lost to the system prompt 3 runs of
-        # 3; leading the question wins
-        if re.search(r"\bin spanish\b|\ben español\b", ql):
+        # measured: prompt instructions alone still code-switched 1 run
+        # in 3, so forced-Spanish replies are generated-then-verified
+        # (retry once at temp 0) before any audio plays
+        es_forced = bool(re.search(r"\bin spanish\b|\ben español\b", ql))
+        if es_forced:
             ask = ("EN ESPAÑOL — responde únicamente en español. "
                    + ask)
         prompt = persona.build_prompt(ask, context)
+        if es_forced:
+            reply = ""
+            for temp, hard in ((0.3, ""),
+                               (0.0, "RESPONDE SOLO EN ESPAÑOL, SIN "
+                                     "NINGUNA PALABRA EN INGLÉS.\n")):
+                reply = "".join(llm.generate_stream(
+                    hard + prompt, system, temperature=temp)).strip()
+                if _clean_spanish(reply):
+                    break
+            emit("spoke", text=reply, mode="answer-es")
+            if not config.MUTE:
+                tts.speak_stream(iter([reply]), preroll=tts.next_ack())
+            self.history.append((question, reply))
+            self.last_mode = "answer"
+            return reply
         if self.history:
             recent = "\n".join(f"User: {u}\nBox: {b}"
                                for u, b in self.history[-3:])
