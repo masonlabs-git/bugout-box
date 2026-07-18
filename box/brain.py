@@ -261,6 +261,15 @@ class Brain:
         """Native tool calling: Gemma picks a tool with typed args; the
         SYSTEM executes it deterministically. The model chooses — it
         never computes. No tool call (or any failure) -> RAG."""
+        # knowledge-shaped questions skip the router: its ~10s of tool
+        # prefill is pure tax on "how do I purify water" (the regex fast
+        # paths already catch question-shaped TOOL asks like "how much
+        # water do we have"). The router earns its cost only on
+        # statement-shaped utterances ("somebody dropped off blankets").
+        if re.match(r"\s*(?:how|what|why|when|where|who|which|is|are|"
+                    r"does|do|can|could|should|will|would|tell)\b",
+                    question, re.I):
+            return None
         try:
             from . import router
             routed = router.route_tools(question)
