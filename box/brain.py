@@ -59,7 +59,9 @@ def _directed(heard: str) -> bool:
     words = heard.strip(" ,.!?").split()
     if not words or len(words) > _MAX_FOLLOWUP_WORDS:
         return False                    # long rambles are room talk
-    first = words[0].lower().strip(",.!?'\"")
+    first = words[0].lower().strip(",.!?'\"").split("'")[0]
+    # split("'"): "where's/what's/who's" must match where/what/who —
+    # live miss: bare wake, then "Where's the closest place..." ignored
     if first in _DIRECTED_STARTS:
         return True
     return bool(re.search(r"\b(?:ember|amber)\b", heard, re.I))

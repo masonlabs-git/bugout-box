@@ -125,3 +125,14 @@ class PlanningVsStockTest(unittest.TestCase):
             "We need to see how much gallons of water we have in our storage"))
         self.assertFalse(is_planning_question(
             "how much water do we have left"))
+
+
+class ContractionFollowupTest(unittest.TestCase):
+    def test_wheres_whats_contractions_are_directed(self):
+        # verbatim venue miss: wake -> "Where's the closest place to
+        # get gas around here?" -> ignored
+        for q in ("Where's the closest place to get gas around here?",
+                  "What's the fastest way to purify water",
+                  "how's the water supply looking"):
+            action, _ = route(q, True)
+            self.assertEqual(action, "answer", f"{q!r} was dropped")
