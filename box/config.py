@@ -54,3 +54,7 @@ BOX_LON = float(os.environ.get("BOX_LON", "-111.8508"))
 # Mute: text-only mode for development off the box (no piper/aplay).
 MUTE = os.environ.get("BOX_MUTE", "") == "1"
 
+# Staff (FEMA-worker) mode PIN for the dashboard — unlocks destructive
+# actions like removing a registry entry. Residents never need it.
+STAFF_PIN = os.environ.get("BOX_STAFF_PIN", "3637")
+

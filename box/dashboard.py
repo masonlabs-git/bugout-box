@@ -37,13 +37,18 @@ header{{padding:10px 16px;background:#1e2a1e;display:flex;gap:12px;
        align-items:center;flex-wrap:wrap}}
 h1{{font-size:18px;margin:0}} .badge{{padding:2px 10px;border-radius:10px;
 background:#8a2f2f;font-weight:600;font-size:12px}}
-.ok{{background:#2f6a2f}}
+.ok{{background:#2f6a2f}} .staff{{background:#6a5a2f}}
+.danger{{background:#8a2f2f;width:auto;padding:6px 12px;font-size:14px}}
 nav a{{color:#9fd49f;margin-right:12px;text-decoration:none}}
 main{{padding:12px 16px}} .card{{background:#1c241c;border-radius:8px;
 padding:10px 14px;margin-bottom:10px}}
 small{{color:#8fa58f}} img{{max-width:96px;border-radius:6px}}
-input,button{{font-size:16px;padding:8px;border-radius:6px;border:none}}
-button{{background:#2f6a2f;color:#fff}}
+input,button{{font-size:17px;padding:12px;border-radius:6px;border:none;
+box-sizing:border-box}}
+input{{width:100%;margin-bottom:10px;background:#0f140f;color:#dfe8df}}
+button{{background:#2f6a2f;color:#fff;width:100%}}
+.viewfinder{{width:100%;max-width:480px;border-radius:10px;display:block;
+margin:0 auto 10px}}
 </style>
 <header><h1>&#128293; EMBER</h1>
 <span class=badge>OFFLINE &#10003;</span>
@@ -51,7 +56,12 @@ button{{background:#2f6a2f;color:#fff}}
 <nav><a href=/>mind</a><a href=/board>board</a><a href=/intake>intake</a>
 <a href=/find>find</a>
 <a href=/supplies>supplies</a><a href=/brief>brief</a><a href=/chat>ask</a>
+<a href=/staff>{staff_label}</a>
 </nav></header><main>{body}</main>"""
+
+
+def is_staff() -> bool:
+    return request.cookies.get("staff") == config.STAFF_PIN
 
 
 def ram() -> str:
@@ -67,7 +77,8 @@ def page(body: str, live: bool = False) -> str:
     """live=True auto-reloads every 6s (thought stream, board). Form
     pages must NOT refresh — it wipes whatever the user is typing."""
     r = "<meta http-equiv=refresh content=6>" if live else ""
-    return PAGE.format(refresh=r, ram=ram(), body=body)
+    label = "&#128737; staff" if is_staff() else "staff"
+    return PAGE.format(refresh=r, ram=ram(), body=body, staff_label=label)
 
 
 @app.get("/")
@@ -91,15 +102,66 @@ def mind():
 def board():
     _, s = conns()
     cards = []
+    staff = is_staff()
     for h in scribe.households(s):
         t = time.strftime("%b %d %H:%M", time.localtime(h["ts"]))
         img = f"<img src=/photo/{h['id']}>" if h["photo"] else ""
         med = f"<br><small>medical: {html.escape(h['medical'])}</small>" if h["medical"] else ""
         mis = f"<br><small>&#9888; missing: {html.escape(h['missing'])}</small>" if h["missing"] else ""
+        rm = (f"<form method=post action=/remove/{h['id']} "
+              f"style='margin-top:6px'><button class=danger "
+              f"onclick=\"return confirm('Remove {html.escape(h['names'])}?')\">"
+              f"remove</button></form>") if staff else ""
         cards.append(f"<div class=card>{img}<b>{html.escape(h['names'])}</b>"
-                     f"<br><small>checked in {t}</small>{med}{mis}</div>")
+                     f"<br><small>checked in {t}</small>{med}{mis}{rm}</div>")
     return page(f"<div class=card><b>{scribe.headcount(s)} people "
                 f"registered</b></div>" + "".join(cards), live=True)
+
+
+def _cam():
+    from . import camera
+    if camera.live_cam is None:
+        try:
+            camera.live_cam = camera.Cam()
+            time.sleep(0.8)               # first frames arrive
+        except Exception:
+            pass
+    return camera.live_cam
+
+
+@app.get("/preview.jpg")
+def preview():
+    cam = _cam()
+    f = cam.latest() if cam else None
+    if not f:
+        return "", 503
+    from flask import Response
+    return Response(f, mimetype="image/jpeg")
+
+
+@app.get("/stream.mjpg")
+def stream():
+    cam = _cam()
+    if cam is None:
+        return "", 503
+    from flask import Response
+
+    def gen():
+        while True:
+            f = cam.latest()
+            if f:
+                yield (b"--frame\r\nContent-Type: image/jpeg\r\n"
+                       b"Content-Length: " + str(len(f)).encode()
+                       + b"\r\n\r\n" + f + b"\r\n")
+            time.sleep(0.12)
+
+    return Response(gen(),
+                    mimetype="multipart/x-mixed-replace; boundary=frame")
+
+
+_VIEWFINDER = ("<div class=card><img class=viewfinder src=/stream.mjpg "
+               "alt='camera warming up...'>"
+               "<small>live view from Ember's camera</small></div>")
 
 
 @app.get("/photo/<int:rid>")
@@ -121,9 +183,9 @@ def find_form():
       this box.</small></div>
       <form method=post action=/find enctype=multipart/form-data class=card>
       <input type=file name=photo accept=image/* capture>
-      <button>search</button></form>
+      <button>search</button></form>""" + _VIEWFINDER + """
       <form method=post action=/find-camera class=card>
-      <button>&#128247; or stand in front of Ember and use its camera</button>
+      <button>&#128247; stand in front of Ember and use its camera</button>
       </form>""")
 
 
@@ -210,15 +272,16 @@ def chat():
 
 @app.get("/intake")
 def intake_form():
-    return page("""<form method=post action=/intake class=card>
-      <input name=names style="width:90%" placeholder="household names (comma-separated)"><br><br>
-      <input name=medical style="width:90%" placeholder="medical needs / allergies"><br><br>
-      <input name=missing style="width:90%" placeholder="anyone unaccounted for"><br><br>
-      <input name=phone style="width:60%" placeholder="phone (optional)"><br><br>
-      <label><input type=checkbox name=take_photo value=1 checked>
+    return page(_VIEWFINDER + """<form method=post action=/intake class=card>
+      <input name=names placeholder="household names (comma-separated)">
+      <input name=medical placeholder="medical needs / allergies">
+      <input name=missing placeholder="anyone unaccounted for">
+      <input name=phone placeholder="phone (optional)">
+      <label><input type=checkbox name=take_photo value=1 checked
+      style="width:auto;margin-right:8px">
       take a check-in photo with the box camera (consented, for
       reunification only)</label><br><br>
-      <button>register</button></form>
+      <button>&#128247; register &amp; capture</button></form>
       <div class=card><small>Consent: photos are taken only if the arrival
       agrees, used solely for family reunification, and never leave this box.
       </small></div>""")
@@ -238,6 +301,52 @@ def intake_submit():
                           request.form.get("missing", ""),
                           request.form.get("phone", ""), photo=photo)
     emit("registered", id=rid, names=names, photo=bool(photo))
+    return redirect("/board")
+
+
+@app.get("/staff")
+def staff_form():
+    if is_staff():
+        return page("<div class=card>&#128737; <b>Staff mode is ON</b> — "
+                    "the board now shows remove buttons for bad entries. "
+                    "Removals are audit-logged.</div>"
+                    "<form method=post action=/staff-off class=card>"
+                    "<button>switch back to resident mode</button></form>")
+    return page("""<div class=card><b>Staff mode</b><br><small>For shelter
+      workers: unlocks removing registry entries with bad photos or data.
+      Every removal is written to the activity log.</small></div>
+      <form method=post action=/staff class=card>
+      <input name=pin type=password placeholder="staff PIN">
+      <button>enter staff mode</button></form>""")
+
+
+@app.post("/staff")
+def staff_login():
+    from flask import make_response
+    if request.form.get("pin", "") != config.STAFF_PIN:
+        return page("<div class=card>Wrong PIN.</div>"
+                    "<a href=/staff>try again</a>")
+    resp = make_response(redirect("/board"))
+    resp.set_cookie("staff", config.STAFF_PIN, max_age=8 * 3600,
+                    samesite="Lax")
+    return resp
+
+
+@app.post("/staff-off")
+def staff_off():
+    from flask import make_response
+    resp = make_response(redirect("/board"))
+    resp.set_cookie("staff", "", max_age=0)
+    return resp
+
+
+@app.post("/remove/<int:rid>")
+def remove(rid: int):
+    if not is_staff():
+        return redirect("/staff")
+    _, s = conns()
+    if scribe.remove(s, rid):
+        emit("registry_removed", id=rid)
     return redirect("/board")
 
 

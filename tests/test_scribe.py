@@ -48,3 +48,20 @@ class ScribeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RemoveTest(unittest.TestCase):
+    def test_remove_deletes_and_audit_logs(self):
+        import sqlite3
+        from box import scribe
+        conn = scribe.connect(":memory:")
+        rid = scribe.register(conn, "Bad Entry")
+        self.assertTrue(scribe.remove(conn, rid, by="fema-worker"))
+        self.assertEqual(scribe.households(conn), [])
+        entries = [e for _, e in scribe.recent_log(conn)]
+        self.assertTrue(any("removed by fema-worker" in e for e in entries))
+
+    def test_remove_missing_id_is_false(self):
+        from box import scribe
+        conn = scribe.connect(":memory:")
+        self.assertFalse(scribe.remove(conn, 999))

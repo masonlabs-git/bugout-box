@@ -66,6 +66,19 @@ def find_person(conn, name: str) -> list[dict]:
     return [_reg_dict(r) for r in rows]
 
 
+def remove(conn, rid: int, by: str = "staff") -> bool:
+    """Staff-mode removal of a bad registry entry — audit-logged, so the
+    ICS paper trail shows who vanished from the board and why-adjacent."""
+    row = conn.execute("SELECT names FROM registry WHERE id=?",
+                       (rid,)).fetchone()
+    if row is None:
+        return False
+    conn.execute("DELETE FROM registry WHERE id=?", (rid,))
+    conn.commit()
+    log(conn, f"Registry entry #{rid} ({row[0]}) removed by {by}")
+    return True
+
+
 def households(conn) -> list[dict]:
     rows = conn.execute(
         "SELECT id, ts, names, medical, missing, phone, photo "
