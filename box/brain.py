@@ -26,34 +26,39 @@ _INTERVIEW_TRIGGERS = ("check in", "check us in", "register", "intake",
                        "we just arrived", "sign in")
 
 
-def pick_persona(text: str) -> str:
+def pick_persona(text: str) -> tuple[str, str]:
+    """Returns (mode_name, system_prompt). Answer and coach share ONE
+    prompt (see persona.MAIN) so the KV prefix stays cached across modes;
+    the mode name is for the event log/dashboard only."""
     t = text.lower()
     if any(k in t for k in _INTERVIEW_TRIGGERS):
-        return persona.INTERVIEW
+        return "interview", persona.INTERVIEW
     if any(k in t for k in _COACH_TRIGGERS):
-        return persona.COACH
-    return persona.ANSWER
+        return "coach", persona.MAIN
+    return "answer", persona.MAIN
 
 
 class Brain:
     def __init__(self):
         self.conn = retrieval.connect()
         self.history: list[tuple[str, str]] = []   # (user, box) turns
-        self.mode = persona.ANSWER
+        self.mode = persona.MAIN
 
     def answer(self, question: str, system: str = None) -> str:
         """One full turn: retrieve, generate (streamed to speech), log."""
         emit("heard", text=question)
-        # sticky coaching/interview: stay in the flow until it resolves
+        # sticky interview: stay in the intake flow until it resolves.
+        # (coach/answer share one prompt — the model itself carries the
+        # coaching flow via RECENT CONVERSATION, no stickiness needed)
+        mode = "answer"
         if system is None:
-            picked = pick_persona(question)
-            if picked is not persona.ANSWER:
-                self.mode = picked
-            system = self.mode
+            mode, system = pick_persona(question)
+            if mode == "interview":
+                self.mode = persona.INTERVIEW
+            if self.mode is persona.INTERVIEW:
+                mode, system = "interview", persona.INTERVIEW
         hits = retrieval.search(self.conn, question)
-        emit("retrieved", citations=[h.citation for h in hits],
-             mode="coach" if system is persona.COACH else
-                  "interview" if system is persona.INTERVIEW else "answer")
+        emit("retrieved", citations=[h.citation for h in hits], mode=mode)
         context = retrieval.context_block(hits)
         prompt = persona.build_prompt(question, context)
         if self.history:

@@ -44,8 +44,9 @@ def main() -> None:
     hits = retrieval.search(conn, heard)
     context = retrieval.context_block(hits)
     prompt = persona.build_prompt(heard, context)
-    system = pick_persona(heard)
+    mode, system = pick_persona(heard)
     mark("retrieval")
+    print(f"[mode] {mode}")
     print(f"[sources] {[h.citation for h in hits]}")
     print(f"[prompt chars] system={len(system)} prompt={len(prompt)}")
 

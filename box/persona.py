@@ -19,18 +19,26 @@ BASE = (
     "entirely in that language."
 )
 
-ANSWER = BASE + (
-    "\nAnswer the question in at most three short sentences, then the "
-    "citation marker. Lead with the single most important action."
+# One prompt for both answering and emergency coaching. Two separate
+# system prompts meant every answer<->coach switch invalidated ollama's
+# KV prefix cache and re-prefilled ~280 tokens (+5s on a Pi 5). Folding
+# the coach behavior into a conditional keeps ONE cached prefix for the
+# box's whole life.
+MAIN = BASE + (
+    "\nNormally: answer in at most three short sentences, then the "
+    "citation marker. Lead with the single most important action. "
+    "\nEXCEPTION — if the user describes an active emergency happening "
+    "to a person right now (bleeding, choking, not breathing, burned, "
+    "seizure, unconscious): their hands are busy, so coach instead. "
+    "Give exactly ONE step at a time and stop. When they say 'done', "
+    "'next', or similar, give the next step; if they say 'repeat', "
+    "repeat the current step in different words. Start with the most "
+    "critical action or triage question."
 )
 
-COACH = BASE + (
-    "\nThe user has an urgent situation and their hands may be busy. "
-    "Give exactly ONE step at a time, then wait. When they say 'done', "
-    "'next', or similar, give the next step. If they say 'repeat', "
-    "repeat the current step in different words. Start by asking the "
-    "single most important triage question."
-)
+# Aliases kept so existing imports stay valid — one object, one KV prefix.
+ANSWER = MAIN
+COACH = MAIN
 
 INTERVIEW = BASE + (
     "\nYou are registering an arrival at the shelter intake desk. Ask "
