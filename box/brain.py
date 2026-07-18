@@ -123,6 +123,21 @@ def is_story(text: str) -> bool:
     return bool(_STORY.search(text))
 
 
+# "How much water do 85 people NEED for three days" is Sphere math for
+# the RAG, not a ledger lookup — but "we need to SEE how much water we
+# have" IS a ledger lookup. Deterministic tiebreak the router can't get
+# wrong: people/day requirements or a bare 'need' (not 'need to see/
+# know/check/find') means planning.
+_PLANNING = re.compile(
+    r"\d+\s+(?:people|persons|adults|children|kids|families)"
+    r"|\bper\s+(?:person|day)\b"
+    r"|\bneed(?:s|ed)?\b(?!\s+to\s+(?:see|know|check|find))", re.I)
+
+
+def is_planning_question(text: str) -> bool:
+    return bool(_PLANNING.search(text))
+
+
 _ES_WORDS = re.compile(r"\b(el|la|los|las|es|agua|para|de|una|con|"
                        r"hierve|filtre|cocine|purifica\w*)\b", re.I)
 _EN_WORDS = re.compile(r"\b(the|and|water|boil|if|you|from|it)\b")
@@ -177,7 +192,8 @@ class Brain:
         kind = r.get("kind")
         emit("routed", intent=kind)
         try:
-            if kind == "stock" and r.get("item"):
+            if (kind == "stock" and r.get("item")
+                    and not is_planning_question(question)):
                 from . import quartermaster, scribe
                 reply = quartermaster.stock_reply(
                     scribe.connect(), str(r["item"]),

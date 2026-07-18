@@ -20,7 +20,7 @@ _SYSTEM = "You classify requests for an offline emergency assistant. JSON only."
 _PROMPT = """UTTERANCE: "{q}"
 
 Classify into exactly one JSON object:
-- {{"kind":"stock","item":"<supply name>"}} — asking how much of a supply is on hand / in storage.
+- {{"kind":"stock","item":"<supply name>"}} — asking how much of a supply is CURRENTLY on hand / in storage. NOT how much is needed or required for some number of people or days — that is "question".
 - {{"kind":"supply","direction":"out|in","qty":<number>,"unit":"<unit or empty>","item":"<supply name>"}} — reporting supplies handed out or received.
 - {{"kind":"places","place":"<place type>"}} — asking where/how far the nearest place is.
 - {{"kind":"recognize"}} — asking to be recognized / who am I, via camera.

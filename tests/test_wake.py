@@ -108,3 +108,20 @@ class DirectedFollowupTest(unittest.TestCase):
                   "done", "next"):
             action, _ = route(q, True)
             self.assertEqual(action, "answer", f"{q!r} was dropped")
+
+
+class PlanningVsStockTest(unittest.TestCase):
+    # demo beat #5 got hijacked by the router into a ledger lookup
+    def test_requirement_questions_are_planning(self):
+        from box.brain import is_planning_question
+        self.assertTrue(is_planning_question(
+            "How much water do 85 people need for three days?"))
+        self.assertTrue(is_planning_question(
+            "how much water do we need per person"))
+
+    def test_stock_lookups_are_not_planning(self):
+        from box.brain import is_planning_question
+        self.assertFalse(is_planning_question(
+            "We need to see how much gallons of water we have in our storage"))
+        self.assertFalse(is_planning_question(
+            "how much water do we have left"))
