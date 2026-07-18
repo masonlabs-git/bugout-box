@@ -8,8 +8,8 @@ SCRIBE_DB = Path(os.environ.get("BOX_SCRIBE_DB", str(VAULT / "scribe.db")))
 
 OLLAMA_URL = os.environ.get("BOX_OLLAMA_URL", "http://localhost:11434")
 MODEL = os.environ.get("BOX_MODEL", "gemma4:e2b")
-NUM_CTX = int(os.environ.get("BOX_NUM_CTX", "2560"))
-NUM_PREDICT = int(os.environ.get("BOX_NUM_PREDICT", "160"))
+NUM_CTX = int(os.environ.get("BOX_NUM_CTX", "2048"))
+NUM_PREDICT = int(os.environ.get("BOX_NUM_PREDICT", "90"))
 
 STT_URL = os.environ.get("BOX_STT_URL", "http://localhost:8771/stt")
 

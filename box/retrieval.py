@@ -260,12 +260,16 @@ def search(conn: sqlite3.Connection, query: str,
     return hits
 
 
-def context_block(hits: list[Hit], budget_chars: int = 3600) -> str:
-    """Render hits into the prompt context, trimmed to a char budget so the
-    2560-token window never overflows."""
+def context_block(hits: list[Hit], budget_chars: int = 1500,
+                  per_hit_chars: int = 700) -> str:
+    """Render hits into the prompt context. Kept SMALL on purpose: prompt-eval
+    time dominates on-device latency (~34 tok/s), so a tight context is the
+    biggest lever on how fast the box starts answering. Each hit is capped so
+    three sources still fit and one long chunk can't crowd the others out."""
     parts, used = [], 0
     for i, h in enumerate(hits, 1):
-        take = h.text[:max(0, budget_chars - used)]
+        room = min(per_hit_chars, budget_chars - used)
+        take = h.text[:max(0, room)]
         if not take:
             break
         parts.append(f"[{i}] ({h.citation})\n{take}")
