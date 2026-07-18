@@ -19,6 +19,12 @@ OLLAMA_URL = os.environ.get("BOX_OLLAMA_URL", "http://localhost:11434")
 # quality. On an 8GB Pi the difference is "thrashes swap" vs "multi-GB
 # headroom", and CPU tok/s scales with bytes touched per token.
 MODEL = os.environ.get("BOX_MODEL", "gemma4:e2b-it-qat")
+
+# Hearth tier: an optional on-prem hub (Spark-class) running the same
+# ollama API with a bigger Gemma. The box tries it first and falls back
+# to local silently — the hub is an upgrade, never a dependency.
+HUB_URL = os.environ.get("BOX_HUB_URL", "")
+HUB_MODEL = os.environ.get("BOX_HUB_MODEL", "gemma4:12b-it-qat")
 # 1536, not 2048: measured prompt is ~650 tok (persona + 1000-char context
 # + question + 3-turn history head-room) and every unused ctx slot is KV
 # RAM the 8GB box cannot spare next to the resident model.

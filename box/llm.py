@@ -10,18 +10,11 @@ import requests
 from . import config
 
 
-def generate_stream(prompt: str, system: str,
-                    num_predict: int = None,
-                    stats: dict = None,
-                    temperature: float = None) -> Iterator[str]:
-    """Yield response text fragments as they generate.
-
-    Pass a dict as `stats` to receive ollama's timing numbers from the
-    final message (prompt_eval_* = prefill, eval_* = generation) — the
-    split that tells you which side of inference is eating the latency.
-    """
+def _stream(url: str, model: str, prompt: str, system: str,
+            num_predict: int, stats: dict, temperature: float,
+            keep_alive, connect_timeout: float) -> Iterator[str]:
     body = {
-        "model": config.MODEL,
+        "model": model,
         "system": system,
         "prompt": prompt,
         "stream": True,
@@ -33,10 +26,10 @@ def generate_stream(prompt: str, system: str,
             # consistent, instruction-tight answers, not creative ones
             "temperature": 0.7 if temperature is None else temperature,
         },
-        "keep_alive": -1,
+        "keep_alive": keep_alive,
     }
-    with requests.post(f"{config.OLLAMA_URL}/api/generate", json=body,
-                       stream=True, timeout=300) as r:
+    with requests.post(f"{url}/api/generate", json=body, stream=True,
+                       timeout=(connect_timeout, 300)) as r:
         r.raise_for_status()
         for line in r.iter_lines():
             if not line:
@@ -52,6 +45,43 @@ def generate_stream(prompt: str, system: str,
                         if k in d:
                             stats[k] = d[k]
                 return
+
+
+def generate_stream(prompt: str, system: str,
+                    num_predict: int = None,
+                    stats: dict = None,
+                    temperature: float = None) -> Iterator[str]:
+    """Yield response text fragments as they generate.
+
+    Hearth handoff: when BOX_HUB_URL is set, the hub's bigger Gemma is
+    tried first (tight connect timeout); any failure before the first
+    token falls back to the local model invisibly. A hub failure AFTER
+    tokens flowed raises — restarting a half-spoken answer would be
+    worse than truncating it.
+
+    Pass a dict as `stats` to receive ollama's timing numbers from the
+    final message; stats['served_by'] says which brain answered.
+    """
+    if config.HUB_URL:
+        yielded = False
+        try:
+            for frag in _stream(config.HUB_URL, config.HUB_MODEL, prompt,
+                                system, num_predict, stats, temperature,
+                                keep_alive="2h", connect_timeout=1.0):
+                yielded = True
+                yield frag
+            if stats is not None:
+                stats["served_by"] = "hub"
+            return
+        except (requests.RequestException, json.JSONDecodeError):
+            if yielded:
+                raise
+    for frag in _stream(config.OLLAMA_URL, config.MODEL, prompt, system,
+                        num_predict, stats, temperature,
+                        keep_alive=-1, connect_timeout=5.0):
+        yield frag
+    if stats is not None:
+        stats["served_by"] = "local"
 
 
 def generate(prompt: str, system: str, num_predict: int = None) -> str:
