@@ -28,3 +28,7 @@ CHUNK_CHARS = 1600
 CHUNK_OVERLAP = 200
 
 DASHBOARD_PORT = int(os.environ.get("BOX_DASHBOARD_PORT", "8880"))
+
+# Mute: text-only mode for development off the box (no piper/aplay).
+MUTE = os.environ.get("BOX_MUTE", "") == "1"
+
