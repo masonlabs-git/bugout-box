@@ -197,6 +197,10 @@ def _clean_spanish(text: str) -> bool:
             and len(_EN_WORDS.findall(text)) < 2)
 
 
+class _EnglishLeak(Exception):
+    """Forced-Spanish stream opened in English — retry at temp 0."""
+
+
 class Brain:
     def __init__(self):
         self.conn = retrieval.connect()
@@ -486,17 +490,50 @@ class Brain:
                    + ask)
         prompt = persona.build_prompt(ask, context)
         if es_forced:
-            reply = ""
-            for temp, hard in ((0.3, ""),
-                               (0.0, "RESPONDE SOLO EN ESPAÑOL, SIN "
-                                     "NINGUNA PALABRA EN INGLÉS.\n")):
+            # optimistic streaming with an early language sniff: buffer
+            # the first sentence; clean Spanish -> release and stream at
+            # normal latency. Contaminated -> silent temp-0 retry. (The
+            # old generate-everything-first gate cost 20-40 s of dead
+            # air after the ack.)
+            def _es_stream(gen):
+                buf = []
+                text = ""
+                sniffed = False
+                for frag in gen:
+                    if sniffed:
+                        yield frag
+                        continue
+                    buf.append(frag)
+                    text += frag
+                    if len(text) > 60 or re.search(r"[.!?]\s", text):
+                        if not _clean_spanish(text) \
+                                and len(_EN_WORDS.findall(text)) >= 1:
+                            raise _EnglishLeak(text)
+                        sniffed = True
+                        yield from buf
+                if not sniffed:          # short reply — check whole
+                    if not _clean_spanish(text):
+                        raise _EnglishLeak(text)
+                    yield from buf
+
+            reply = None
+            try:
+                stream = _es_stream(llm.generate_stream(
+                    prompt, system, temperature=0.3))
+                if config.MUTE:
+                    reply = "".join(stream).strip()
+                else:
+                    reply = tts.speak_stream(stream,
+                                             preroll=tts.next_ack())
+            except _EnglishLeak:
                 reply = "".join(llm.generate_stream(
-                    hard + prompt, system, temperature=temp)).strip()
-                if _clean_spanish(reply):
-                    break
+                    "RESPONDE SOLO EN ESPAÑOL, SIN NINGUNA PALABRA EN "
+                    "INGLÉS.\n" + prompt, system,
+                    temperature=0.0)).strip()
+                if not config.MUTE:
+                    tts.speak_stream(iter([reply]),
+                                     preroll=tts.next_ack())
             emit("spoke", text=reply, mode="answer-es")
-            if not config.MUTE:
-                tts.speak_stream(iter([reply]), preroll=tts.next_ack())
             self.history.append((question, reply))
             self.last_mode = "answer"
             return reply
