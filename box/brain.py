@@ -259,9 +259,11 @@ class Brain:
         else:
             ask = question
         # explicit language requests must not depend on sampling luck —
-        # measured: 'tell me in Spanish' answered in English 1 run in ~3
+        # measured: a trailing note lost to the system prompt 3 runs of
+        # 3; leading the question wins
         if re.search(r"\bin spanish\b|\ben español\b", ql):
-            ask += "\nIMPORTANT: Responde COMPLETAMENTE en español."
+            ask = ("EN ESPAÑOL — responde únicamente en español. "
+                   + ask)
         prompt = persona.build_prompt(ask, context)
         if self.history:
             recent = "\n".join(f"User: {u}\nBox: {b}"

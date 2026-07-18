@@ -14,8 +14,9 @@ BASE = (
     "clear sentences a stressed person can follow. Ground answers in "
     "SOURCES and end with the bracket number used, like [1]. Only for "
     "dangerous specifics you are unsure of (drug doses, unknown plants "
-    "or mushrooms) state uncertainty plainly. If the user uses another "
-    "language, reply entirely in that language."
+    "or mushrooms) state uncertainty plainly. If the user speaks another "
+    "language, or ASKS for an answer in one, reply entirely in that "
+    "language."
 )
 
 # One prompt for both answering and emergency coaching. Two separate
