@@ -60,3 +60,20 @@ class WakeRoutingTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StoryRoutingTest(unittest.TestCase):
+    def test_story_requests_detected(self):
+        from box.brain import is_story
+        for q in ("Awesome, can you read a bedtime story",
+                  "tell me a story about a brave robot",
+                  "can you tell the kids a story",
+                  "make up a story for Ana"):
+            self.assertTrue(is_story(q), q)
+
+    def test_normal_questions_are_not_stories(self):
+        from box.brain import is_story
+        for q in ("How do I purify creek water?",
+                  "what's the story with the water supply",
+                  "we gave out 20 blankets"):
+            self.assertFalse(is_story(q), q)

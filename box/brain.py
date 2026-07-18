@@ -86,6 +86,17 @@ _CONTINUATIONS = {"next", "done", "okay", "ok", "yes", "ready", "continue"}
 _RECOGNIZE = ("recognize me", "who am i", "who am I", "do you know me",
               "do you see me", "look at me", "recognize my face")
 
+# Story/comfort requests must NOT go through the RAG — the grounded
+# 3-sentence persona once answered "read a bedtime story" with a cited
+# sentence from Where There Is No Doctor.
+_STORY = re.compile(
+    r"\b(?:tell|read|make\s+up|give|share)\b.{0,40}\bstor(?:y|ies)\b"
+    r"|\bbedtime\b", re.I)
+
+
+def is_story(text: str) -> bool:
+    return bool(_STORY.search(text))
+
 
 class Brain:
     def __init__(self):
@@ -133,6 +144,21 @@ class Brain:
         # recognition fast-path: camera + face match, no LLM
         if any(k in ql for k in map(str.lower, _RECOGNIZE)):
             return self._say(question, self._recognize(), "recognize")
+        # comfort fast-path: stories skip retrieval, drop the citation
+        # rules, and get a real token budget
+        if system is None and is_story(question):
+            emit("retrieved", citations=[], mode="story")
+            stream = llm.generate_stream(
+                f"REQUEST: {question}\nTell the story now.",
+                persona.STORY, num_predict=300)
+            if config.MUTE:
+                reply = "".join(stream).strip()
+            else:
+                reply = tts.speak_stream(stream, preroll=tts.next_ack())
+            emit("spoke", text=reply, mode="story")
+            self.history.append((question, reply))
+            self.last_mode = "story"
+            return reply
         # quartermaster fast-path: spoken supply transactions and stock
         # queries hit the ledger directly — inventory must be exact
         try:

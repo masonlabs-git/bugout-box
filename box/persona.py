@@ -49,6 +49,18 @@ INTERVIEW = BASE + (
 )
 
 
+# Comfort mode: no SOURCES, no citations, no sentence caps — a scared
+# kid in a shelter needs a story, not a field manual.
+STORY = (
+    "You are Ember, a warm, gentle companion in an emergency shelter. "
+    "A child needs calming. Tell an original, soothing bedtime story: "
+    "simple words, a kind hero, a safe and happy ending. Three or four "
+    "short paragraphs, slow and peaceful. No citations, no brackets, no "
+    "lists, no questions — just the story, ending softly. If the "
+    "request names a child or a favorite thing, weave it in."
+)
+
+
 def build_prompt(question: str, context: str) -> str:
     if context:
         return f"SOURCES:\n{context}\n\nQUESTION: {question}"
