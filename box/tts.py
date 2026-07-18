@@ -5,6 +5,7 @@ sentence two still generates.
 """
 from __future__ import annotations
 
+import json
 import os
 import queue
 import re
@@ -13,9 +14,33 @@ import sys
 import tempfile
 import threading
 import wave
+from pathlib import Path
 from typing import Callable, Iterable, Iterator
 
 from . import config
+
+# Fixed lines pre-synthesized offline with kokoro (deploy/make_canned.py)
+# — kokoro is ~3x too slow for live speech on the Pi but its quality is
+# worth having on the lines the box says most. Exact-text match.
+CANNED_DIR = Path(config.VAULT) / "canned"
+_canned: dict[str, str] = {}
+
+
+def _load_canned() -> None:
+    m = CANNED_DIR / "manifest.json"
+    if not _canned and m.exists():
+        try:
+            _canned.update(json.loads(m.read_text()))
+        except (OSError, ValueError):
+            pass
+
+
+def canned_wav(text: str) -> str | None:
+    _load_canned()
+    name = _canned.get(text)
+    if name and (CANNED_DIR / name).exists():
+        return str(CANNED_DIR / name)
+    return None
 
 # Caleb-approved pronunciations (v2 by ear). Keys are case-insensitive.
 PRONOUNCE = {
@@ -120,7 +145,11 @@ def play(wav_path: str) -> None:
 
 
 def speak(text: str, voice: str = None) -> None:
-    play(synth(text, voice))
+    w = canned_wav(text)
+    if w:
+        play(w)
+    else:
+        play(synth(text, voice))
 
 
 # Pre-synthesized acknowledgment lines. Prefill of a fresh question costs
@@ -139,11 +168,13 @@ _WAKE_ACK: list[str] = []
 
 
 def prepare_acks(lines: Iterable[str] = ACK_LINES) -> None:
-    """Synthesize the acknowledgment + wake-response lines once (boot)."""
+    """Acknowledgment + wake-response wavs, ready before first use —
+    kokoro-canned when available, else piper-synthesized at boot."""
     for line in lines:
-        _ACKS.append(synth(line, config.VOICE_EN))
+        _ACKS.append(canned_wav(line) or synth(line, config.VOICE_EN))
     if not _WAKE_ACK:
-        _WAKE_ACK.append(synth("Yes? I'm listening.", config.VOICE_EN))
+        _WAKE_ACK.append(canned_wav("Yes? I'm listening.")
+                         or synth("Yes? I'm listening.", config.VOICE_EN))
 
 
 def play_wake_ack() -> None:
