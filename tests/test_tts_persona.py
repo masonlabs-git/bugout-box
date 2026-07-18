@@ -52,10 +52,11 @@ class PersonaTest(unittest.TestCase):
         p = persona.build_prompt("hello", "")
         self.assertNotIn("SOURCES:", p)
 
-    def test_personas_demand_citations_and_safety(self):
+    def test_personas_ground_and_never_refuse(self):
         for s in (persona.ANSWER, persona.COACH, persona.INTERVIEW):
             self.assertIn("offline", s)
-            self.assertIn("Safety first", s)
+            self.assertIn("Never refuse", s)
+            self.assertIn("SOURCES", s)
 
 
 if __name__ == "__main__":

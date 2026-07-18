@@ -153,10 +153,31 @@ PROTOCOL_PINS = {
 }
 
 
+# Query expansion: map colloquial words to the vocabulary the field manuals
+# actually use, so "make water safe to drink" reaches "purify/boil/disinfect".
+EXPAND = {
+    "safe": ["purify", "disinfect"],
+    "drink": ["potable", "drinking"],
+    "clean": ["purify", "disinfect"],
+    "water": ["water", "boil"],
+    "cut": ["wound", "laceration"],
+    "bleeding": ["hemorrhage", "wound"],
+    "hurt": ["injury", "wound"],
+    "food": ["ration", "edible"],
+    "poop": ["latrine", "sanitation"],
+    "bathroom": ["latrine", "sanitation"],
+}
+
+
 def _terms(q: str) -> list[str]:
     words = _WORD.findall(q.lower())
     content = [w for w in words if len(w) > 1 and w not in STOPWORDS]
-    return content[:8]
+    expanded = list(content)
+    for w in content:
+        for extra in EXPAND.get(w, []):
+            if extra not in expanded:
+                expanded.append(extra)
+    return expanded[:12]
 
 
 def _match(conn: sqlite3.Connection, fq: str, limit: int,
