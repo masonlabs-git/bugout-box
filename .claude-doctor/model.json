@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "savedAt": "2026-07-18T04:57:44.163Z",
+  "savedAt": "2026-07-18T17:00:12.239Z",
   "totalSessions": 139,
   "totalProjects": 7,
   "signalBaselines": {
@@ -33,7 +33,7 @@
     {
       "projectPath": "Users/calebmason",
       "sessionCount": 96,
-      "overallScore": -180.95661554869358,
+      "overallScore": -187.23433639767146,
       "signalFrequency": {
         "edit-thrashing": 37,
         "repeated-instructions": 20,
@@ -50,8 +50,8 @@
         "51 file(s) edited 5+ times. Worst: /Users/calebmason/Clicklease/mco-scan-service/src/main/resources/static/index.html (87x)",
         "User repeated similar instructions 62 time(s). The agent failed to act on the instruction correctly.",
         "16 file(s) edited 5+ times. Worst: /Users/calebmason/Clicklease/titan-v4/WILFRIDO-DEPLOY-REQUEST.md (35x)",
-        "14 file(s) edited 5+ times. Worst: /Users/calebmason/.claude/projects/-Users-calebmason/memory/project_sf_exit_crm_rust.md (15x)",
-        "User repeated similar instructions 35 time(s). The agent failed to act on the instruction correctly."
+        "14 file(s) edited 5+ times. Worst: /Users/calebmason/bugout-box/box/brain.py (37x)",
+        "14 file(s) edited 5+ times. Worst: /Users/calebmason/.claude/projects/-Users-calebmason/memory/project_sf_exit_crm_rust.md (15x)"
       ],
       "suggestions": []
     },

@@ -1,7 +1,7 @@
 # Claude Doctor Session Guidance
 
 Based on analysis of 139 sessions across 7 projects.
-Last updated: 2026-07-18T04:57:44.163Z
+Last updated: 2026-07-18T17:00:12.239Z
 
 ## Known Issues
 

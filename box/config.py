@@ -58,7 +58,10 @@ VOICE_EN = os.environ.get("BOX_VOICE_EN",
 VOICE_ES = os.environ.get("BOX_VOICE_ES",
                           str(Path.home() / "piper-voices/es_MX-claude-high.onnx"))
 
-AUDIO_DEVICE = os.environ.get("BOX_AUDIO_DEVICE", "plughw:2,0")
+AUDIO_DEVICE = os.environ.get("BOX_AUDIO_DEVICE",
+                              "plughw:CARD=Plus,DEV=0")
+# CARD=Plus (the EMEET, by name) — USB re-enumeration at the
+# venue must not be able to point the box at the wrong card
 SAMPLE_RATE = 16000
 
 RETRIEVAL_TOP_K = int(os.environ.get("BOX_TOP_K", "3"))
