@@ -60,7 +60,14 @@ def passages(filename: str) -> list[str]:
         raw = raw[:m.start()]
     paras = [re.sub(r"\s+", " ", p).strip()
              for p in re.split(r"\n\s*\n", raw)]
-    paras = [p for p in paras if len(p) > 40 and not p.isupper()]
+    # drop headings and the front-matter that survives inside the START/
+    # END markers (heard live: "Printed and bound in Great Britain by
+    # William Clowes Limited" read aloud as the opening of Peter Rabbit)
+    _boiler = re.compile(
+        r"(?i)printed|published|publisher|copyright|illustrat|"
+        r"all rights|isbn|transcriber|ebook|frederick warne|contents")
+    paras = [p for p in paras
+             if len(p) > 40 and not p.isupper() and not _boiler.search(p)]
     out, buf = [], ""
     for p in paras:
         if len(buf) + len(p) > 700 and buf:
