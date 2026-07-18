@@ -112,3 +112,20 @@ during the event; the repo was created public at kickoff with no prior code._
 - Hailo NPU genai zoo has no Gemma (Qwen/Llama/DeepSeek only), so Gemma runs
   on CPU by design; the NPU is reserved for Whisper STT. NPU = ears, CPU =
   brain, SSD = memory.
+
+## Full-chain status (2026-07-18 ~05:40, on the box)
+
+END-TO-END WORKS, OFFLINE: audio -> NPU Whisper ("How do I purify creek
+water...") -> FTS5 retrieval (FEMA/Sphere/FM 21-76) -> Gemma 4 E2B ->
+spoken cited answer out the EMEET. Every subsystem proven on hardware.
+
+Known issue to fix (morning): STT via subprocess loads torch (~1.5GB CPU
+RAM) which evicts the 6.8GB Gemma -> cold reload -> 171s total. NOT
+fundamental. Fix: resident Whisper service with RAM guard (or torch-free
+pre/post), so STT (NPU, 1.2s) and Gemma (CPU, 1.4s first token) coexist
+without eviction. Measured component speeds already prove the target.
+
+Remaining: (1) resident-whisper RAM fix, (2) live-mic VAD front-end (loop
+code exists in box/audio.py + brain.py, just needs the NPU STT it now has),
+(3) rename bug-out box -> EMBER (repo, code, TTS intro, AP SSID), (4) print
+lid tomorrow (tub printing overnight).
