@@ -64,23 +64,33 @@ if __name__ == "__main__":
 
 
 class ModeRoutingTest(unittest.TestCase):
+    # pick_persona returns (mode, system). Answer and coach share ONE
+    # system prompt (persona.MAIN) so ollama's KV prefix stays cached
+    # across modes; only the mode label differs.
     def test_bleeding_routes_to_coach(self):
         from box.brain import pick_persona
         from box import persona
-        self.assertIs(pick_persona("my arm is bleeding badly"),
-                      persona.COACH)
+        mode, system = pick_persona("my arm is bleeding badly")
+        self.assertEqual(mode, "coach")
+        self.assertIs(system, persona.MAIN)
 
     def test_checkin_routes_to_interview(self):
         from box.brain import pick_persona
         from box import persona
-        self.assertIs(pick_persona("we just arrived, can you check us in"),
-                      persona.INTERVIEW)
+        mode, system = pick_persona("we just arrived, can you check us in")
+        self.assertEqual(mode, "interview")
+        self.assertIs(system, persona.INTERVIEW)
 
     def test_general_question_stays_answer(self):
         from box.brain import pick_persona
         from box import persona
-        self.assertIs(pick_persona("how much water do we need"),
-                      persona.ANSWER)
+        mode, system = pick_persona("how much water do we need")
+        self.assertEqual(mode, "answer")
+        self.assertIs(system, persona.MAIN)
+
+    def test_answer_and_coach_share_one_kv_prefix(self):
+        from box import persona
+        self.assertIs(persona.ANSWER, persona.COACH)
 
 
 class CitationStripTest(unittest.TestCase):
