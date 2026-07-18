@@ -6,6 +6,7 @@ field manuals retrieves on par. One .db file on the vault drive.
 """
 from __future__ import annotations
 
+import html
 import json
 import re
 import sqlite3
@@ -49,6 +50,7 @@ def connect(db_path: Path | str = None) -> sqlite3.Connection:
 # ----------------------------------------------------------------- ingest
 
 def _clean(text: str) -> str:
+    text = html.unescape(html.unescape(text))   # double-escaped ZIM extracts
     text = unicodedata.normalize("NFKC", text)
     text = re.sub(r"[ \t]+", " ", text)
     return re.sub(r"\n{3,}", "\n\n", text).strip()
@@ -130,26 +132,90 @@ def ingest_jsonl(conn: sqlite3.Connection, path: Path, source: str,
 
 _WORD = re.compile(r"[A-Za-z0-9']+")
 
+# High-frequency function words: excluded from queries — they bloat FTS
+# posting-list intersections into multi-second scans on the vault HDD.
+STOPWORDS = frozenset(
+    "a an and are as at be but by can could do does for from had has have "
+    "how i if in is it its me my of on or our should so that the their "
+    "them then there these they this to us was we what when where which "
+    "who will with would you your".split())
 
-def _fts_query(q: str) -> str:
-    """User text -> safe FTS5 OR-query. OR keeps recall high; bm25 does the
-    ranking. Quoting each term neutralizes FTS5 operator syntax."""
+# Authority tier: hand-curated operational sources outrank the Wikipedia
+# bulk layer — a shelter answer should cite FM 21-76 or Sphere before trivia.
+BULK_SOURCES = ("Wikipedia Medicine",)
+
+# Protocol pins: when a query names a formal protocol, its source is
+# guaranteed a seat in the context regardless of BM25's vote — protocol
+# coaching must be deterministic, not probabilistic.
+PROTOCOL_PINS = {
+    "triage": "START Triage Protocol",
+    "ics": "NIMS ICS Forms",
+}
+
+
+def _terms(q: str) -> list[str]:
     words = _WORD.findall(q.lower())
-    words = [w for w in words if len(w) > 1][:12]
-    return " OR ".join(f'"{w}"' for w in words)
+    content = [w for w in words if len(w) > 1 and w not in STOPWORDS]
+    return content[:8]
+
+
+def _match(conn: sqlite3.Connection, fq: str, limit: int,
+           bulk: bool | None) -> list[Hit]:
+    """bulk=False -> authority sources only; True -> bulk only; None -> all."""
+    where = "chunks MATCH ?"
+    args: list = [fq]
+    if bulk is False:
+        where += " AND source NOT IN (%s)" % ",".join(
+            "?" * len(BULK_SOURCES))
+        args += list(BULK_SOURCES)
+    elif bulk is True:
+        where += " AND source IN (%s)" % ",".join("?" * len(BULK_SOURCES))
+        args += list(BULK_SOURCES)
+    rows = conn.execute(
+        f"SELECT source, title, text, bm25(chunks) AS score "
+        f"FROM chunks WHERE {where} ORDER BY score LIMIT ?",
+        args + [limit]).fetchall()
+    return [Hit(source=r[0], title=r[1], text=html.unescape(r[2]),
+                score=r[3]) for r in rows]
 
 
 def search(conn: sqlite3.Connection, query: str,
            top_k: int = None) -> list[Hit]:
-    fq = _fts_query(query)
-    if not fq:
+    """Tiered retrieval: AND-precision before OR-recall, authority sources
+    before the Wikipedia bulk layer."""
+    terms = _terms(query)
+    if not terms:
         return []
-    rows = conn.execute(
-        "SELECT source, title, text, bm25(chunks) AS score "
-        "FROM chunks WHERE chunks MATCH ? ORDER BY score LIMIT ?",
-        (fq, top_k or config.RETRIEVAL_TOP_K)).fetchall()
-    return [Hit(source=r[0], title=r[1], text=r[2], score=r[3])
-            for r in rows]
+    k = top_k or config.RETRIEVAL_TOP_K
+    and_q = " ".join(f'"{w}"' for w in terms)      # implicit AND
+    or_q = " OR ".join(f'"{w}"' for w in terms)
+
+    hits: list[Hit] = []
+    seen: set[tuple] = set()
+
+    def take(new: list[Hit]) -> None:
+        for h in new:
+            key = (h.source, h.title, h.text[:80])
+            if key not in seen and len(hits) < k:
+                seen.add(key)
+                hits.append(h)
+
+    for term, source in PROTOCOL_PINS.items():     # deterministic protocols
+        if term in terms:
+            rows = conn.execute(
+                "SELECT source, title, text, 0.0 FROM chunks "
+                "WHERE source = ? LIMIT 2", (source,)).fetchall()
+            take([Hit(source=r[0], title=r[1],
+                      text=html.unescape(r[2]), score=r[3]) for r in rows])
+
+    take(_match(conn, and_q, k, bulk=False))       # precise + authoritative
+    if len(hits) < k:
+        take(_match(conn, or_q, k, bulk=False))    # recall, still authority
+    if len(hits) < k:
+        take(_match(conn, and_q, k, bulk=True))    # precise bulk
+    if len(hits) < k:
+        take(_match(conn, or_q, k, bulk=True))     # last resort
+    return hits
 
 
 def context_block(hits: list[Hit], budget_chars: int = 3600) -> str:

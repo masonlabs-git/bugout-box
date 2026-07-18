@@ -82,3 +82,30 @@ class ChunkerTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TierAndPinTest(unittest.TestCase):
+    def setUp(self):
+        import box.retrieval as R
+        self.tmp = tempfile.TemporaryDirectory()
+        self.conn = connect(Path(self.tmp.name) / "i.db")
+        rows = [("Wikipedia Medicine", "Triage trivia",
+                 "triage history and water trivia " * 30)] * 5
+        rows += [("START Triage Protocol", "",
+                  "Assess respiration perfusion mental status for triage.")]
+        rows += [("FM 21-76 Survival", "", "Boil water to purify it fully.")]
+        self.conn.executemany(
+            "INSERT INTO chunks(source,title,text) VALUES (?,?,?)", rows)
+        self.conn.commit()
+
+    def tearDown(self):
+        self.conn.close()
+        self.tmp.cleanup()
+
+    def test_authority_beats_bulk(self):
+        hits = search(self.conn, "purify water", top_k=2)
+        self.assertEqual(hits[0].source, "FM 21-76 Survival")
+
+    def test_protocol_pin_guarantees_start(self):
+        hits = search(self.conn, "help me triage the injured", top_k=3)
+        self.assertIn("START Triage Protocol", [h.source for h in hits])
