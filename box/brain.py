@@ -82,6 +82,10 @@ def pick_persona(text: str) -> tuple[str, str]:
 # re-stated step one forever instead of advancing the protocol.
 _CONTINUATIONS = {"next", "done", "okay", "ok", "yes", "ready", "continue"}
 
+# "Do you recognize me?" — camera + face match by voice.
+_RECOGNIZE = ("recognize me", "who am i", "who am I", "do you know me",
+              "do you see me", "look at me", "recognize my face")
+
 
 class Brain:
     def __init__(self):
@@ -92,9 +96,43 @@ class Brain:
         self.topic = ""            # last real question — continuations
         #                            retrieve against THIS, not "next"
 
+    def _say(self, question: str, reply: str, mode: str) -> str:
+        emit("spoke", text=reply, mode=mode)
+        if not config.MUTE:
+            tts.speak(reply)
+        self.history.append((question, reply))
+        return reply
+
+    def _recognize(self) -> str:
+        """Camera + face match: 'Hey Ember, do you recognize me?'"""
+        from . import camera, faces, scribe
+        if not config.MUTE:
+            tts.speak("Hold still. Let me look.")
+        shot = camera.capture("recognize")
+        if not shot:
+            return "My camera is not responding."
+        sconn = scribe.connect()
+        results = faces.match(sconn, shot, scribe.households(sconn))
+        emit("face_recognize", matches=len(results))
+        if not results:
+            return ("I can't see a face clearly. Step in front of my "
+                    "camera and ask again.")
+        best = results[0]
+        if best["same_person"]:
+            when = time.strftime("%I:%M %p",
+                                 time.localtime(best["ts"])).lstrip("0")
+            return (f"Yes, I recognize you. You checked in as "
+                    f"{best['names']} at {when}.")
+        return ("I see you, but I don't recognize you from check-in. "
+                "You can register at the intake desk.")
+
     def answer(self, question: str, system: str = None) -> str:
         """One full turn: retrieve, generate (streamed to speech), log."""
         emit("heard", text=question)
+        ql = question.lower()
+        # recognition fast-path: camera + face match, no LLM
+        if any(k in ql for k in map(str.lower, _RECOGNIZE)):
+            return self._say(question, self._recognize(), "recognize")
         # places fast-path: "nearest hospital" answers are computed from
         # the offline OSM index, not generated — exact and instant
         try:
@@ -103,11 +141,7 @@ class Brain:
         except Exception:
             n = None
         if n:
-            emit("spoke", text=n, mode="places")
-            if not config.MUTE:
-                tts.speak(n)
-            self.history.append((question, n))
-            return n
+            return self._say(question, n, "places")
         cont = question.lower().strip(" .!?") in _CONTINUATIONS
         # sticky interview: stay in the intake flow until it resolves.
         mode = "answer"
@@ -127,13 +161,9 @@ class Brain:
             # no sources -> no answer. Observed failure: garbage input
             # retrieved nothing and the model still invented advice with
             # a fabricated [1]. Grounded-with-receipts is the product.
-            reply = ("I could not find that in my field manuals. "
-                     "Try asking a different way.")
-            emit("spoke", text=reply)
-            if not config.MUTE:
-                tts.speak(reply)
-            self.history.append((question, reply))
-            return reply
+            return self._say(question,
+                             "I could not find that in my field manuals. "
+                             "Try asking a different way.", "answer")
         context = retrieval.context_block(hits)
         if cont and mode == "coach":
             done_steps = "; ".join(

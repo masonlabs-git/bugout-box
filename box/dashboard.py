@@ -118,12 +118,24 @@ def find_form():
       this box.</small></div>
       <form method=post action=/find enctype=multipart/form-data class=card>
       <input type=file name=photo accept=image/* capture>
-      <button>search</button></form>""")
+      <button>search</button></form>
+      <form method=post action=/find-camera class=card>
+      <button>&#128247; or stand in front of Ember and use its camera</button>
+      </form>""")
+
+
+@app.post("/find-camera")
+def find_camera():
+    from . import camera
+    shot = camera.capture("find")
+    if not shot:
+        return page("<div class=card>Camera did not respond.</div>"
+                    "<a href=/find>back</a>")
+    return _find_results(shot)
 
 
 @app.post("/find")
 def find():
-    from . import faces
     f = request.files.get("photo")
     if not f or not f.filename:
         return redirect("/find")
@@ -132,6 +144,11 @@ def find():
     qdir.mkdir(parents=True, exist_ok=True)
     qpath = str(qdir / f"query-{int(time.time())}.jpg")
     f.save(qpath)
+    return _find_results(qpath)
+
+
+def _find_results(qpath: str):
+    from . import faces
     _, s = conns()
     results = faces.match(s, qpath, scribe.households(s))
     emit("face_search", matches=len(results))
@@ -195,6 +212,9 @@ def intake_form():
       <input name=medical style="width:90%" placeholder="medical needs / allergies"><br><br>
       <input name=missing style="width:90%" placeholder="anyone unaccounted for"><br><br>
       <input name=phone style="width:60%" placeholder="phone (optional)"><br><br>
+      <label><input type=checkbox name=take_photo value=1 checked>
+      take a check-in photo with the box camera (consented, for
+      reunification only)</label><br><br>
       <button>register</button></form>
       <div class=card><small>Consent: photos are taken only if the arrival
       agrees, used solely for family reunification, and never leave this box.
@@ -206,11 +226,15 @@ def intake_submit():
     names = request.form.get("names", "").strip()
     if not names:
         return redirect("/intake")
+    photo = ""
+    if request.form.get("take_photo"):
+        from . import camera
+        photo = camera.capture("intake") or ""
     _, s = conns()
     rid = scribe.register(s, names, request.form.get("medical", ""),
                           request.form.get("missing", ""),
-                          request.form.get("phone", ""))
-    emit("registered", id=rid, names=names)
+                          request.form.get("phone", ""), photo=photo)
+    emit("registered", id=rid, names=names, photo=bool(photo))
     return redirect("/board")
 
 
