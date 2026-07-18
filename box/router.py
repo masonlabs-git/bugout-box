@@ -35,7 +35,7 @@ TOOLS = [
                           "description": "in = received, out = given"},
             "qty": {"type": "number"},
             "unit": {"type": "string",
-                     "description": "liters, gallons, or empty"},
+                     "description": "unit of measure such as liters or gallons; omit when there is none"},
             "item": {"type": "string"}},
             "required": ["direction", "qty", "item"]}}},
     {"type": "function", "function": {

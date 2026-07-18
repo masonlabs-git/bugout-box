@@ -119,6 +119,8 @@ def apply_txn(sconn, direction: str, qty: float, unit: str,
     it (the model already judged intent)."""
     stock = scribe.stock(sconn)
     unit = (unit or "").lower()
+    if unit and not re.fullmatch(_UNITS, unit, re.I):
+        unit = ""     # model artifacts like unit='empty' or 'units'
     item = _canonical_item(raw_item, stock)
     if gated and not (item in stock or unit or set(item.split()) & COMMON):
         return None
