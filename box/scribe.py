@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS registry (
     medical TEXT DEFAULT '',
     missing TEXT DEFAULT '',
     phone TEXT DEFAULT '',
-    photo TEXT DEFAULT ''         -- path to intake photo, if consented
+    photo TEXT DEFAULT '',        -- path to intake photo, if consented
+    location TEXT DEFAULT ''      -- cot/zone now, or where they're headed
 );
 CREATE TABLE IF NOT EXISTS supplies (
     id INTEGER PRIMARY KEY,
@@ -41,26 +42,33 @@ def connect(db_path: Path | str = None) -> sqlite3.Connection:
                            check_same_thread=False)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript(SCHEMA)
+    try:                       # migrate pre-location registries in place
+        conn.execute("ALTER TABLE registry ADD COLUMN location "
+                     "TEXT DEFAULT ''")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass                   # column already there
     return conn
 
 
 # ---------------------------------------------------------------- registry
 
 def register(conn, names: str, medical: str = "", missing: str = "",
-             phone: str = "", photo: str = "") -> int:
+             phone: str = "", photo: str = "", location: str = "") -> int:
     cur = conn.execute(
-        "INSERT INTO registry(ts,names,medical,missing,phone,photo) "
-        "VALUES (?,?,?,?,?,?)",
+        "INSERT INTO registry(ts,names,medical,missing,phone,photo,"
+        "location) VALUES (?,?,?,?,?,?,?)",
         (time.time(), names.strip(), medical.strip(), missing.strip(),
-         phone.strip(), photo))
+         phone.strip(), photo, location.strip()))
     conn.commit()
-    log(conn, f"Registered household: {names.strip()}")
+    loc = f" @ {location.strip()}" if location.strip() else ""
+    log(conn, f"Registered household: {names.strip()}{loc}")
     return cur.lastrowid
 
 
 def find_person(conn, name: str) -> list[dict]:
     rows = conn.execute(
-        "SELECT id, ts, names, medical, missing, phone, photo "
+        "SELECT id, ts, names, medical, missing, phone, photo, location "
         "FROM registry WHERE names LIKE ? ORDER BY ts DESC",
         (f"%{name.strip()}%",)).fetchall()
     return [_reg_dict(r) for r in rows]
@@ -81,14 +89,15 @@ def remove(conn, rid: int, by: str = "staff") -> bool:
 
 def households(conn) -> list[dict]:
     rows = conn.execute(
-        "SELECT id, ts, names, medical, missing, phone, photo "
+        "SELECT id, ts, names, medical, missing, phone, photo, location "
         "FROM registry ORDER BY ts DESC").fetchall()
     return [_reg_dict(r) for r in rows]
 
 
 def _reg_dict(r) -> dict:
     return {"id": r[0], "ts": r[1], "names": r[2], "medical": r[3],
-            "missing": r[4], "phone": r[5], "photo": r[6]}
+            "missing": r[4], "phone": r[5], "photo": r[6],
+            "location": r[7] if len(r) > 7 else ""}
 
 
 # ---------------------------------------------------------------- supplies

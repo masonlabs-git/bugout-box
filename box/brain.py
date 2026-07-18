@@ -434,7 +434,15 @@ class Brain:
             action, question = route(heard,
                                      awake=time.time() < awake_until)
             if action == "answer":
-                self.answer(question)
+                try:
+                    self.answer(question)
+                except Exception as e:   # NOTHING kills the loop. Ever.
+                    emit("error", stage="answer", detail=str(e)[:200])
+                    if not config.MUTE:
+                        try:
+                            tts.speak("I hit a snag. Ask me that again.")
+                        except Exception:
+                            pass
                 awake_until = time.time() + FOLLOWUP_S
             elif action == "wake":
                 emit("wake", text=heard)

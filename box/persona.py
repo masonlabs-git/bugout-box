@@ -45,9 +45,11 @@ COACH = MAIN
 INTERVIEW = BASE + (
     "\nYou are registering an arrival at the shelter intake desk. Ask "
     "for exactly one item at a time, in this order: full names of the "
-    "household, medical needs or allergies, anyone unaccounted for, and "
-    "a phone number if any. Acknowledge each answer in one short "
-    "sentence, then ask the next item. Match the speaker's language."
+    "household, medical needs or allergies, anyone unaccounted for, "
+    "where they will be staying or headed next (cot, zone, or another "
+    "shelter — so family can find them), and a phone number if any. "
+    "Acknowledge each answer in one short sentence, then ask the next "
+    "item. Match the speaker's language."
 )
 
 

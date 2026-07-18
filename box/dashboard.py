@@ -108,6 +108,9 @@ def board():
         img = f"<img src=/photo/{h['id']}>" if h["photo"] else ""
         med = f"<br><small>medical: {html.escape(h['medical'])}</small>" if h["medical"] else ""
         mis = f"<br><small>&#9888; missing: {html.escape(h['missing'])}</small>" if h["missing"] else ""
+        loc = (f"<br><small>&#128205; {html.escape(h.get('location',''))}"
+               f"</small>") if h.get("location") else ""
+        med = loc + med
         rm = (f"<form method=post action=/remove/{h['id']} "
               f"style='margin-top:6px'><button class=danger "
               f"onclick=\"return confirm('Remove {html.escape(h['names'])}?')\">"
@@ -226,10 +229,13 @@ def _find_results(qpath: str):
         t = time.strftime("%b %d %H:%M", time.localtime(r["ts"]))
         badge = ("&#9989; likely match" if r["same_person"]
                  else "possible match")
+        where = (f"<br><b>&#128205; {html.escape(r.get('location',''))}"
+                 f"</b>") if r.get("location") else ""
         cards.append(
             f"<div class=card><img src=/photo/{r['id']}>"
             f"<b>{html.escape(r['names'])}</b> — {badge} "
-            f"({r['score']:.0%})<br><small>checked in {t}</small></div>")
+            f"({r['score']:.0%})<br><small>checked in {t}</small>"
+            f"{where}</div>")
     return page("".join(cards) + "<a href=/find>search again</a>")
 
 
@@ -277,6 +283,7 @@ def intake_form():
       <input name=medical placeholder="medical needs / allergies">
       <input name=missing placeholder="anyone unaccounted for">
       <input name=phone placeholder="phone (optional)">
+      <input name=location placeholder="where will they be? (cot / zone / next shelter)">
       <label><input type=checkbox name=take_photo value=1 checked
       style="width:auto;margin-right:8px">
       take a check-in photo with the box camera (consented, for
@@ -299,7 +306,8 @@ def intake_submit():
     _, s = conns()
     rid = scribe.register(s, names, request.form.get("medical", ""),
                           request.form.get("missing", ""),
-                          request.form.get("phone", ""), photo=photo)
+                          request.form.get("phone", ""), photo=photo,
+                          location=request.form.get("location", ""))
     emit("registered", id=rid, names=names, photo=bool(photo))
     return redirect("/board")
 
