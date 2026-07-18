@@ -23,8 +23,12 @@ from .brain import pick_persona
 
 
 def main() -> None:
+    import os
+    os.nice(4)                    # mirror production: yield CPU to ollama
     wav = sys.argv[1]
     mute = "--mute" in sys.argv
+    if not mute:
+        tts.prepare_acks()        # boot-time cost in production
 
     marks: dict[str, float] = {}
     t0 = time.time()
@@ -58,21 +62,27 @@ def main() -> None:
             yield frag
         mark("gen_done")
 
+    audio_count = [0]
+
     def on_event(kind: str) -> None:
         if kind == "audio":
-            mark("first_audio")
+            audio_count[0] += 1
+            mark("first_audio")           # the ack, if preroll is in use
+            if audio_count[0] == 2:
+                mark("first_answer_audio")
 
     stream = timed(llm.generate_stream(prompt, system, stats=stats))
     if mute:
         reply = "".join(stream).strip()
     else:
-        reply = tts.speak_stream(stream, on_event=on_event)
+        reply = tts.speak_stream(stream, on_event=on_event,
+                                 preroll=tts.next_ack())
     mark("speech_done")
     print(f"[reply] {reply}")
 
     print("\n=== chain breakdown (s since audio-in) ===")
     for k in ("stt", "retrieval", "first_token", "first_audio",
-              "gen_done", "speech_done"):
+              "first_answer_audio", "gen_done", "speech_done"):
         if k in marks:
             print(f"  {k:12s} {marks[k]:6.1f}")
     if stats:

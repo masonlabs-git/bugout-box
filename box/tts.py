@@ -113,14 +113,44 @@ def speak(text: str, voice: str = None) -> None:
     play(synth(text, voice))
 
 
+# Pre-synthesized acknowledgment lines. Prefill of a fresh question costs
+# seconds of silence on the Pi; playing a canned "checking my sources"
+# the instant STT lands makes the box feel alive while Gemma works —
+# and it costs nothing at answer time because the wavs are made at boot.
+_ACKS: list[str] = []
+_ack_i = 0
+
+ACK_LINES = ("Checking my field manuals.",
+             "One moment. Searching my sources.",
+             "Let me check my references.")
+
+
+def prepare_acks(lines: Iterable[str] = ACK_LINES) -> None:
+    """Synthesize the acknowledgment lines once (boot time)."""
+    for line in lines:
+        _ACKS.append(synth(line, config.VOICE_EN))
+
+
+def next_ack() -> str | None:
+    """Rotating pre-synthesized ack wav, or None if not prepared."""
+    global _ack_i
+    if not _ACKS:
+        return None
+    wav = _ACKS[_ack_i % len(_ACKS)]
+    _ack_i += 1
+    return wav
+
+
 def speak_stream(fragments: Iterable[str],
-                 on_event: Callable[[str], None] = None) -> str:
+                 on_event: Callable[[str], None] = None,
+                 preroll: str = None) -> str:
     """Speak a token stream sentence-by-sentence. Returns the full text.
 
     A dedicated player thread makes the overlap real: synthesis of
     sentence N+1 (and Gemma's generation of N+2) proceed WHILE sentence N
-    is audible. The previous version played inline, which serialized
-    playback against synthesis and stalled the token stream.
+    is audible. `preroll` (a pre-synthesized wav, e.g. next_ack()) plays
+    immediately — DURING prefill — and the queue guarantees it finishes
+    before sentence one, so the streams never overlap.
 
     `on_event` (optional) gets "sentence" when a sentence completes from
     the stream and "audio" when a wav starts playing — chain_test uses it
@@ -130,21 +160,25 @@ def speak_stream(fragments: Iterable[str],
 
     def player():
         while True:
-            wav = wavs.get()
-            if wav is None:
+            item = wavs.get()
+            if item is None:
                 return
+            wav, ephemeral = item
             if on_event:
                 on_event("audio")
             play(wav)
-            os.unlink(wav)                    # synth() leaves temp files
+            if ephemeral:
+                os.unlink(wav)                # synth() leaves temp files
 
     th = threading.Thread(target=player, daemon=True)
     th.start()
+    if preroll:
+        wavs.put((preroll, False))            # reusable — never delete
     spoken: list[str] = []
     for sent in sentences(fragments):
         if on_event:
             on_event("sentence")
-        wavs.put(synth(sent, pick_voice(sent)))
+        wavs.put((synth(sent, pick_voice(sent)), True))
         spoken.append(sent)
     wavs.put(None)
     th.join()

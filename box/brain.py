@@ -69,15 +69,22 @@ class Brain:
         if config.MUTE:
             reply = "".join(stream).strip()
         else:
-            reply = tts.speak_stream(stream)
+            # ack plays during prefill — the box responds ~2s after the
+            # question even though the first real sentence is seconds out
+            reply = tts.speak_stream(stream, preroll=tts.next_ack())
         emit("spoke", text=reply)
         self.history.append((question, reply))
         return reply
 
     def loop(self) -> None:
         from . import audio          # deferred: webrtcvad only on the Pi
+        import os
+        os.nice(4)      # yield CPU to ollama: the brain mostly waits on
+        #                 it, and piper/mel bursts were costing ~40% of
+        #                 generation speed in core contention
         emit("status", state="warming model")
-        llm.warmup(persona.ANSWER)
+        llm.warmup(persona.MAIN)
+        tts.prepare_acks()
         emit("status", state="ready")
         tts.speak("Bug-out box ready.")
         while True:
