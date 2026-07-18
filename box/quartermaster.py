@@ -164,10 +164,47 @@ def stock_reply(sconn, raw_item: str, want_gallons: bool = False) -> str:
     return f"You have {_fmt_qty(stock[item])} {item} on hand."
 
 
+# Sphere water planning: "how much water do 85 people need for three
+# days" — a 2B model multiplying three numbers live is sampling
+# roulette (observed: 3,825 / 1,275 / 255 across runs). Computed here,
+# exactly, every time — and fused with the ledger for the shortfall.
+SPHERE_L_PER_PERSON_DAY = 15
+_PLAN_PEOPLE = re.compile(r"(\d+)\s*(?:people|persons|adults|residents|"
+                          r"folks|evacuees)", re.I)
+_PLAN_DAYS = re.compile(r"(\d+)\s*days?", re.I)
+
+
+def planning_reply(text: str, sconn) -> str | None:
+    t = _words_to_digits(text)
+    if "water" not in t.lower() or not re.search(r"\bneed", t, re.I):
+        return None
+    people = _PLAN_PEOPLE.search(t)
+    days = _PLAN_DAYS.search(t)
+    if not (people and days):
+        return None
+    n, d = int(people[1]), int(days[1])
+    total = n * SPHERE_L_PER_PERSON_DAY * d
+    reply = (f"{n} people, times 15 liters, times {d} days: "
+             f"{total:,} liters of water. That is Sphere's standard of "
+             "15 liters per person per day for all needs.")
+    have = scribe.stock(sconn).get("water", 0.0)
+    if have > 0:
+        if have >= total:
+            reply += (f" The ledger shows {_fmt_qty(have)} liters on "
+                      "hand — you are covered.")
+        else:
+            reply += (f" The ledger shows {_fmt_qty(have)} liters on "
+                      f"hand — {total - have:,.0f} liters short.")
+    return reply
+
+
 def maybe_answer(text: str, sconn=None) -> str | None:
     """Regex fast-path: supply transaction or stock query; None if
     neither pattern hits (the LLM router is the safety net behind us)."""
     sconn = sconn or scribe.connect()
+    plan = planning_reply(text, sconn)
+    if plan:
+        return plan
     parsed = parse(text)
     if parsed:
         direction, qty, unit, raw_item = parsed

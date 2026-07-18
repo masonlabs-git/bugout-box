@@ -71,3 +71,27 @@ class QueryTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PlanningMathTest(unittest.TestCase):
+    # demo beat #5: the LLM computed 3,825 / 1,275 / 255 across runs —
+    # planning math is deterministic now
+    def test_sphere_math_exact_every_time(self):
+        conn = fresh()
+        for _ in range(3):
+            r = quartermaster.maybe_answer(
+                "How much water do 85 people need for three days?", conn)
+            self.assertIn("3,825 liters", r)
+            self.assertIn("Sphere", r)
+
+    def test_shortfall_fusion_with_ledger(self):
+        conn = fresh()   # 1000 L on hand
+        r = quartermaster.maybe_answer(
+            "how much water do 85 people need for 3 days", conn)
+        self.assertIn("2,825 liters short", r)
+
+    def test_transactions_not_hijacked_by_planner(self):
+        conn = fresh()
+        r = quartermaster.maybe_answer(
+            "we gave out 40 liters of water", conn)
+        self.assertIn("Distributed 40", r)
