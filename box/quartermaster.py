@@ -140,8 +140,9 @@ def apply_txn(sconn, direction: str, qty: float, unit: str,
     scribe.supply(sconn, item, delta, unit)
     remaining = scribe.stock(sconn).get(item, 0.0)
     verb = "Received" if direction == "in" else "Distributed"
-    reply = (f"Logged. {verb} {spoken} of {item}{converted}. "
-             f"{_fmt_qty(remaining)} {unit} remaining".strip() + ".")
+    of_item = f" of {item}" if unit else f" {item}"
+    left = " ".join(f"{_fmt_qty(remaining)} {unit} remaining".split())
+    reply = f"Logged. {verb} {spoken}{of_item}{converted}. {left}."
     if item == "water":
         days = scribe.water_days_remaining(sconn)
         reply += (f" That is {days:.1f} days at Sphere rates for "
