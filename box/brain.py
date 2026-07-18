@@ -55,6 +55,8 @@ def route(heard: str, awake: bool) -> tuple[str, str]:
         q = (heard[:m.start()] + " " + heard[m.end():]).strip(" ,.!?")
         if len(q.split()) >= 2:
             return "answer", q          # wake word + question in one breath
+        if q.lower() in _ONE_WORD_TURNS:
+            return "answer", q.lower()  # "hey ember, next" mid-story
         return "wake", ""               # bare wake — acknowledge and listen
     if awake:
         words = heard.strip(" ,.!?").split()
@@ -106,6 +108,26 @@ class Brain:
         self.last_mode = "answer"
         self.topic = ""            # last real question — continuations
         #                            retrieve against THIS, not "next"
+        self.reading: tuple[str, str, int] | None = None
+        #   (title, filename, next_passage) while a storybook is open
+
+    def _read_next(self, n: int = 2) -> str:
+        """Speak the next passages of the open storybook."""
+        from . import stories
+        title, filename, idx = self.reading
+        chunk = stories.passages(filename)[idx:idx + n]
+        if not chunk:
+            self.reading = None
+            return f"And that is the end of {title}. Sweet dreams."
+        self.reading = (title, filename, idx + n)
+        text = " ".join(chunk)
+        tail = "" if self.reading is None else \
+            " ... Say next when you're ready."
+        emit("reading", title=title, passage=idx)
+        if not config.MUTE:
+            tts.speak_stream(iter([text + tail]))
+        self.last_mode = "reading"
+        return text
 
     def _say(self, question: str, reply: str, mode: str) -> str:
         emit("spoke", text=reply, mode=mode)
@@ -141,6 +163,30 @@ class Brain:
         """One full turn: retrieve, generate (streamed to speech), log."""
         emit("heard", text=question)
         ql = question.lower()
+        # open storybook owns the turn: next/stop control the reading
+        if self.reading and system is None:
+            w = ql.strip(" .!?")
+            if w in ("stop", "stop reading", "that's enough", "the end"):
+                self.reading = None
+                return self._say(question,
+                                 "Closing the book. Sweet dreams.",
+                                 "reading")
+            if w in _CONTINUATIONS:
+                reply = self._read_next()
+                self.history.append((question, "[read more of the book]"))
+                return reply
+            self.reading = None      # a real question interrupts the book
+        # storybook shelf: "read peter rabbit" -> the actual text
+        from . import stories
+        book = stories.match(question) if system is None else None
+        if book:
+            title, filename = book
+            self.reading = (title, filename, 0)
+            if not config.MUTE:
+                tts.speak(f"{title}. Here we go.")
+            reply = self._read_next()
+            self.history.append((question, f"[opened {title}]"))
+            return reply
         # recognition fast-path: camera + face match, no LLM
         if any(k in ql for k in map(str.lower, _RECOGNIZE)):
             return self._say(question, self._recognize(), "recognize")
