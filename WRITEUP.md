@@ -136,11 +136,31 @@ monthly subscription). Software marginal cost is zero (open weights).
    as his brain; it moved in early. Power bank, price tag, no
    subscription. "And if the kids can't sleep — it reads Peter Rabbit."
 
+## The Hearth tier (working, measured today)
+
+Ember scales up without ever depending on up. An optional on-prem hub —
+a DGX Spark-class box in the incident-command tent, generator-powered —
+runs a bigger Gemma behind the same ollama API. The box tries the hub
+first (1 s connect timeout) and falls back to local silently: the hub
+is an upgrade, never a dependency. Measured over the real network,
+same question, same box:
+
+- **Local Gemma 4 E2B:** answer complete in 12.3 s
+- **Hearth Gemma 4 12B (Spark):** first token 1.7 s, complete in 6.4 s —
+  faster AND measurably better reasoning (on a 20-casualty triage
+  question, E2B oversimplified; the 12B correctly applied the START
+  four-category algorithm)
+
+Business shape: the $599 box is subscription-free forever; agencies buy
+a Hearth + fleet package (one hub, twenty Embers, support contract).
+Survival stays free; coordination at scale is the enterprise product.
+
 ## What's next
 
-Meshtastic LoRa (an off-grid oracle for a whole neighborhood), ggwave
-acoustic box-to-box data (proven), face-match reunification, full offline
-Wikipedia (49 GB, on the drive).
+Meshtastic LoRa (~$12 BOM: the Pi runs meshtasticd natively — boxes
+share ledgers, headcounts, and reunification hits across a valley with
+no infrastructure), GNSS for true self-location, ggwave acoustic
+box-to-box data (proven), full offline Wikipedia (49 GB).
 
 ---
 _Development was AI-assisted (Claude Code). All application code was written
