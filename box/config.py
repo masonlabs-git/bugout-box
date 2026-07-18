@@ -2,7 +2,14 @@
 import os
 from pathlib import Path
 
-VAULT = Path(os.environ.get("BOX_VAULT", "/media/caleb/Expansion/vault"))
+# Vault: the USB drive when present, else the SD-card copy made by
+# deploy/travel-vault.sh — so unplugging the drive (USB-power-budget
+# demos, drive failure) degrades to a fully working box, not a dead one.
+_HDD_VAULT = Path("/media/caleb/Expansion/vault")
+_SD_VAULT = Path.home() / "vault"
+VAULT = Path(os.environ.get("BOX_VAULT",
+                            str(_HDD_VAULT if _HDD_VAULT.exists()
+                                else _SD_VAULT)))
 INDEX_DB = Path(os.environ.get("BOX_INDEX_DB", str(VAULT / "index.db")))
 SCRIBE_DB = Path(os.environ.get("BOX_SCRIBE_DB", str(VAULT / "scribe.db")))
 
