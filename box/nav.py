@@ -127,10 +127,12 @@ def maybe_answer(question: str,
         where = bearing_word(lat, lon, plat, plon)
         on = f" on {street}" if street else ""
         label = name or f"an unnamed {kind}"
-        lead = "The nearest" if i == 0 else "After that,"
-        noun = f" {kind}" if i == 0 else ""
-        parts.append(f"{lead}{noun} is {label}, "
-                     f"{miles:.1f} miles {where}{on}.")
+        if i == 0:
+            parts.append(f"The nearest {kind} is {label}, "
+                         f"{miles:.1f} miles {where}{on}.")
+        else:
+            parts.append(f"After that: {label}, "
+                         f"{miles:.1f} miles {where}{on}.")
     return " ".join(parts)
 
 
