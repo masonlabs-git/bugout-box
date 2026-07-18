@@ -376,6 +376,15 @@ class Brain:
         """One full turn: retrieve, generate (streamed to speech), log."""
         emit("heard", text=question)
         ql = question.lower()
+        # "okay"/"done"/"next" only continue ACTIVE flows. After a
+        # places/ledger/knowledge answer they are polite closure — live
+        # failure: "okay" after the hospital answer produced a panicked
+        # FEMA non-sequitur ("Call emergency services immediately").
+        if (system is None and self.reading is None
+                and ql.strip(" .!?") in _CONTINUATIONS
+                and self.last_mode != "coach"):
+            emit("acknowledged", text=question)
+            return ""
         # open storybook owns the turn: next/stop control the reading
         if self.reading and system is None:
             w = ql.strip(" .!?")
