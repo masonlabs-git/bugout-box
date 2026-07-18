@@ -7,9 +7,22 @@ from pathlib import Path
 # demos, drive failure) degrades to a fully working box, not a dead one.
 _HDD_VAULT = Path("/media/caleb/Expansion/vault")
 _SD_VAULT = Path.home() / "vault"
-VAULT = Path(os.environ.get("BOX_VAULT",
-                            str(_HDD_VAULT if _HDD_VAULT.exists()
-                                else _SD_VAULT)))
+
+
+def _vault_root() -> Path:
+    # A stale mountpoint dir survives the drive being unplugged and
+    # passes a bare exists() while every stat under it raises
+    # PermissionError (field failure: both services dead at the venue).
+    # Only a readable index proves the drive is really there.
+    try:
+        if (_HDD_VAULT / "index.db").is_file():
+            return _HDD_VAULT
+    except OSError:
+        pass
+    return _SD_VAULT
+
+
+VAULT = Path(os.environ.get("BOX_VAULT", str(_vault_root())))
 INDEX_DB = Path(os.environ.get("BOX_INDEX_DB", str(VAULT / "index.db")))
 SCRIBE_DB = Path(os.environ.get("BOX_SCRIBE_DB", str(VAULT / "scribe.db")))
 
