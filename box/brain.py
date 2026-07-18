@@ -32,7 +32,8 @@ _INTERVIEW_TRIGGERS = ("check in", "check us in", "register", "intake",
 # because Whisper frequently hears "Ember" that way. \b keeps "remember"
 # and "member" from waking the box.
 WAKE = re.compile(
-    r"\b(?:hey|hi|ok|okay)?[,\s]*\b(?:ember|amber)\b[,.!?]*\s*", re.I)
+    r"\b(?:hey|hi|ok|okay)?[,\s]*\b(?:ember|amber)\w{0,2}\b[,.!?]*\s*",
+    re.I)   # \w{0,2}: whisper hears "Emberg"/"Embers" — forgive the tail
 FOLLOWUP_S = 25          # after an answer: reply without re-waking
 WAKE_WINDOW_S = 15       # after a bare "hey ember": time to ask
 

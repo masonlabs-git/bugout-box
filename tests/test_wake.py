@@ -11,6 +11,12 @@ class WakeRoutingTest(unittest.TestCase):
         self.assertEqual(action, "answer")
         self.assertEqual(q, "how do I purify creek water")
 
+    def test_whisper_hears_emberg_and_embers(self):
+        # live venue failure: "Hey Emberg." was ignored
+        self.assertEqual(route("Hey Emberg.", False), ("wake", ""))
+        action, q = route("Hey Embers, how do I treat a burn?", False)
+        self.assertEqual(action, "answer")
+
     def test_whisper_hears_amber(self):
         action, q = route("Hey Amber, how much water do we need?", False)
         self.assertEqual(action, "answer")
@@ -89,7 +95,6 @@ class DirectedFollowupTest(unittest.TestCase):
             "device. - I'm calling it. So think about like a couple "
             "things that it does. One",
             "FimoWorker has a device, right?",
-            "the embers.",
             "Well, I'm putting this right here just inside the box.",
         ):
             self.assertEqual(route(chatter, True), ("ignore", ""),
