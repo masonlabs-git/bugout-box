@@ -102,3 +102,13 @@ Wikipedia (49 GB, on the drive).
 ---
 _Development was AI-assisted (Claude Code). All application code was written
 during the event; the repo was created public at kickoff with no prior code._
+
+## Measured on the actual box (Pi 5 + Hailo, home wifi, 2026-07-18)
+
+- Retrieval (authority-split index, 2,871 field-manual chunks): **37–110 ms**.
+- Gemma 4 E2B warm, trimmed context: **1.4 s to first token, 11.9 s full**
+  for a ~90-token cited answer. Sentence-streamed TTS starts speaking at the
+  first sentence, so perceived latency ≈ a couple seconds.
+- Hailo NPU genai zoo has no Gemma (Qwen/Llama/DeepSeek only), so Gemma runs
+  on CPU by design; the NPU is reserved for Whisper STT. NPU = ears, CPU =
+  brain, SSD = memory.
