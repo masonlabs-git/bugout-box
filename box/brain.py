@@ -175,7 +175,7 @@ class Brain:
         if not r:
             return None
         kind = r.get("kind")
-        emit("routed", kind=kind)
+        emit("routed", intent=kind)
         try:
             if kind == "stock" and r.get("item"):
                 from . import quartermaster, scribe
